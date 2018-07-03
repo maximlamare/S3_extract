@@ -5,6 +5,8 @@ Extract S3 OLCI SNOW processor results from S3 OLCI images
 """
 from pathlib import Path
 import csv
+import pandas as pd
+from datetime import datetime
 from snappy_funcs import getS3values
 
 # Input parameters as script arguments
@@ -12,6 +14,7 @@ from snappy_funcs import getS3values
 s3_path = Path('/media/extra/Greenland/S3/raw')
 # coords_file = Path(sys.argv[2])  # Path to file containing list of images
 coords_file = Path('/media/extra/Greenland/S3/csv/EGP/meta.csv')
+output_file = Path('/media/extra/Greenland/S3/csv/EGP/results.csv')
 
 # Open the list of images to process
 image_list = []
@@ -22,7 +25,18 @@ with open(str(coords_file), "r") as csvfile:
     for row in rdr:
         image_list.append(row[0])
 
-# Run the extraction from S3
+# Create a pandas dataframe to store results
+albedo_df = pd.DataFrame()
+
+# Run the extraction from S3 and put results in dataframe
 for image in image_list:
-    output = getS3values(str(s3_path / image / '.SEN3/xfdumanifest'),
-                         coords[1], coords[2])
+    image_name = image + '.SEN3/xfdumanifest.xml'
+    output = getS3values(str(s3_path / image_name), float(coords[1]),
+                         float(coords[2]))
+    idx = datetime.strptime(image.split('_')[7], '%Y%m%dT%H%M%S')
+    alb_df = pd.DataFrame(output, index=[idx])
+    albedo_df = albedo_df.append(alb_df)
+
+# Save to csv
+albedo_df.index.name = 'Date/time'
+albedo_df.to_csv(str(output_file), na_rep="NaN")
