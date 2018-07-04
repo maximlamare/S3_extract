@@ -36,9 +36,11 @@ for image in image_list:
     alb_df = pd.DataFrame(output, index=[idx])
     albedo_df = albedo_df.append(alb_df)
 
-# Save to csv with header information
+# Save the header information to csv
 with open(str(output_file), "w") as outcsv:
     wr = csv.writer(outcsv, delimiter=',')
     wr.writerow(coords)
-    albedo_df.index.name = 'Date/time'
-    albedo_df.to_csv(str(output_file), na_rep="NaN")
+
+# Save dataframe to csv
+albedo_df.index.name = 'Date/time'
+albedo_df.to_csv(str(output_file), mode='a', na_rep="NaN",  header=True)
