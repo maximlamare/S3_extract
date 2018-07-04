@@ -3,6 +3,7 @@
 """
 Extract S3 OLCI SNOW processor results from S3 OLCI images
 """
+import sys
 from pathlib import Path
 import csv
 import pandas as pd
@@ -10,11 +11,9 @@ from datetime import datetime
 from snappy_funcs import getS3values
 
 # Input parameters as script arguments
-# s3_path = Path(sys.argv[1])  # Path to folder containing S3 images
-s3_path = Path('/media/extra/Greenland/S3/raw')
-# coords_file = Path(sys.argv[2])  # Path to file containing list of images
-coords_file = Path('/media/extra/Greenland/S3/csv/EGP/meta.csv')
-output_file = Path('/media/extra/Greenland/S3/csv/EGP/results.csv')
+s3_path = Path(sys.argv[1])  # Path to folder containing S3 images
+coords_file = Path(sys.argv[2])  # Path to file containing list of images
+output_file = Path(sys.argv[3])  # Path to the output csv file
 
 # Open the list of images to process
 image_list = []
@@ -37,6 +36,9 @@ for image in image_list:
     alb_df = pd.DataFrame(output, index=[idx])
     albedo_df = albedo_df.append(alb_df)
 
-# Save to csv
-albedo_df.index.name = 'Date/time'
-albedo_df.to_csv(str(output_file), na_rep="NaN")
+# Save to csv with header information
+with open(str(output_file), "w") as outcsv:
+    wr = csv.writer(outcsv, delimiter=',')
+    wr.writerow(coords)
+    albedo_df.index.name = 'Date/time'
+    albedo_df.to_csv(str(output_file), na_rep="NaN")
