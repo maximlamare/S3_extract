@@ -3,7 +3,7 @@
 """
 Snappy based functions
 """
-import numpy as np
+import math
 # Import SNAP libraries
 from snappy import ProductIO, GeoPos, PixelPos, HashMap, GPF
 
@@ -32,7 +32,8 @@ def pixel_position(in_prod, inlat, inlon):
         - inlat: latitude
         - inlon: longitude
         OUTPUTS:
-        - xx, yy: tuple of pixel coordinates"""
+        - xx, yy: tuple of pixel coordinates
+        Returns (None, None) if coordinates are out of bounds"""
 
     # Read lat/lon position into a GeoPos item
     gpos = GeoPos(inlat, inlon)
@@ -42,17 +43,16 @@ def pixel_position(in_prod, inlat, inlon):
 
     # If the pixpos coordinates are NaN, the queried position is outside of the
     # image bands
-    if np.isnan(pixpos.getX()) or np.isnan(pixpos.getY()):
-        raise ValueError("Coordinates are outside of the S3 image bounds")
+    if math.isnan(pixpos.getX()) or math.isnan(pixpos.getY()):
+        xx = None
+        yy = None
 
     else:
 
         """ Get pixel position in the product and retrieve pixel position of
         lat/lon values."""
-        pixpos_sub = in_prod.getSceneGeoCoding().getPixelPos(gpos, PixelPos())
-
-        xx = int(pixpos_sub.getX())
-        yy = int(pixpos_sub.getY())
+        xx = int(pixpos.getX())
+        yy = int(pixpos.getY())
 
     return (xx, yy)
 
@@ -72,53 +72,34 @@ def subset(in_prod, inlat, inlon, copyMetadata="true"):
         - prod_subset: subset snappy product
         - xx, yy: tuple of pixel coordinates
         """
-    # Read lat/lon position into a GeoPos item
-    gpos = GeoPos(inlat, inlon)
+    # Get pixel position in the product and retrieve x,y.
+    xx, yy = pixel_position(in_prod, inlat, inlon)
 
-    # Retrieve pixel position of lat/lon values
-    pixpos = in_prod.getSceneGeoCoding().getPixelPos(gpos, PixelPos())
+    # Subset around point
+    # Area to subset (3x3 pixels)
+    area = [xx - 3, yy - 3, 6, 6]
 
-    # If the pixpos coordinates are NaN, the queried position is outside of the
-    # image bands
-    if np.isnan(pixpos.getX()) or np.isnan(pixpos.getY()):
-        raise ValueError("Coordinates are outside of the S3 image bounds")
+    # Empty HashMap
+    parameters = HashMap()
 
-    else:
+    # Convert area list to string
+    areastr = ",".join(str(e) for e in area)
 
-        """ Get pixel position in the product and retrieve pixel position of
-        lat/lon values."""
-        pixpos_sub = in_prod.getSceneGeoCoding().getPixelPos(gpos, PixelPos())
+    # Subset parameters
+    parameters.put("region", areastr)
+    parameters.put("subSamplingX", "1")
+    parameters.put("subSamplingY", "1")
+    parameters.put("copyMetadata", copyMetadata)
 
-        xx = int(pixpos_sub.getX())
-        yy = int(pixpos_sub.getY())
+    # Create subset using operator
+    prod_subset = GPF.createProduct("Subset", parameters, in_prod)
 
-        # Subset around point
-        # Area to subset (5x5 pixels)
-        area = [xx - 5, yy - 5, 10, 10]
-
-        # Empty HashMap
-        parameters = HashMap()
-
-        # Convert area list to string
-        areastr = ",".join(str(e) for e in area)
-
-        # Subset parameters
-        parameters.put("region", areastr)
-        parameters.put("subSamplingX", "1")
-        parameters.put("subSamplingY", "1")
-        parameters.put("copyMetadata", copyMetadata)
-
-        # Create subset using operator
-        prod_subset = GPF.createProduct("Subset", parameters, in_prod)
-
-        # Get pixel position in the subset (and therefore other products)
-        pixpos_sub = prod_subset.getSceneGeoCoding().getPixelPos(
-                gpos, PixelPos())
-
-        xx = int(pixpos_sub.getX())
-        yy = int(pixpos_sub.getY())
-
-    return prod_subset, (xx, yy)
+    # Get pixel position in the subset (and therefore other products)
+    # subx, suby = pixel_position(prod_subset, inlat, inlon)
+    # Since the subset is a fixed area, the position is known
+    subx = 3
+    suby = 3
+    return prod_subset, (subx, suby)
 
 
 def snap_snow_albedo(in_prod, ndsi_flag='false', ndsi_thres="0.03",
@@ -206,6 +187,19 @@ def ndsi_pixel(in_prod, pix_coords):
     return (vis_value - nir_value) / (vis_value + nir_value)
 
 
+def idepix_cloud(in_prod, xpix, ypix):
+    """ Run the experimental cloud over snow processor and return
+        a flag. 1 = probable cloud, 0 = no cloud """
+    parameters = HashMap()
+    parameters.put("demBandName", "band_1")
+    idepix_cld = GPF.createProduct("Idepix.Sentinel3.Olci.S3Snow",
+                                   parameters, in_prod)
+    cloudband = idepix_cld.getBand("cloud_over_snow")
+    cloudband.loadRasterData()
+
+    return cloudband.getPixelInt(xpix, ypix)
+
+
 def getS3values(in_file, lat, lon):
     """ Read the input S3 file and run the S3 OLCI SNOW processor for a given
         location.
@@ -237,10 +231,15 @@ def getS3values(in_file, lat, lon):
         currentband = None
         currentband = albedo_prod.getBand(item)
         currentband.loadRasterData()
-        out_values[key] = currentband.getPixelFloat(pix_coords[0],
-                                                    pix_coords[1])
+        out_values[key] = round(currentband.getPixelFloat(pix_coords[0],
+                                                          pix_coords[1]), 4)
 
     # Calculate ndsi at pixel of interest
     out_values.update({'ndsi': ndsi_pixel(prod_subset, pix_coords)})
+
+    # Add experimental cloud over snow result
+    out_values.update({'auto_cloud':
+                       idepix_cloud(prod_subset,
+                                    pix_coords[0], pix_coords[1])})
 
     return(out_values)
