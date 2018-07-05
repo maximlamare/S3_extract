@@ -29,12 +29,29 @@ albedo_df = pd.DataFrame()
 
 # Run the extraction from S3 and put results in dataframe
 for image in image_list:
+    print(image)
     image_name = image + '.SEN3/xfdumanifest.xml'
     output = getS3values(str(s3_path / image_name), float(coords[1]),
                          float(coords[2]))
     idx = datetime.strptime(image.split('_')[7], '%Y%m%dT%H%M%S')
     alb_df = pd.DataFrame(output, index=[idx])
+
+    # Append date and time columns
+    alb_df['year'] = idx.year
+    alb_df['month'] = idx.month
+    alb_df['day'] = idx.day
+    alb_df['hour'] = idx.hour
+    alb_df['minute'] = idx.minute
+    alb_df['second'] = idx.second
+
     albedo_df = albedo_df.append(alb_df)
+
+# Reorder pandas columns
+albedo_df = albedo_df[['year', 'month', 'day', 'hour', 'minute', 'second',
+                       'rBRR_21', 'albedo_bb_planar_sw',
+                       'albedo_spectral_planar_1020', 'grain_diameter',
+                       'snow_specific_area', 'ndsi', 'ice_indicator',
+                       'auto_cloud']]
 
 # Save the header information to csv
 with open(str(output_file), "w") as outcsv:
@@ -42,5 +59,5 @@ with open(str(output_file), "w") as outcsv:
     wr.writerow(coords)
 
 # Save dataframe to csv
-albedo_df.index.name = 'Date/time'
-albedo_df.to_csv(str(output_file), mode='a', na_rep="NaN",  header=True)
+albedo_df.to_csv(str(output_file), mode='a', na_rep=-999,  header=True,
+                 index=False)
