@@ -14,7 +14,7 @@ import sys
 import math
 
 # Import snappy based functions
-from snappy_funcs import open_prod, pixel_position
+from snappy_funcs import open_prod, pixel_position, subset
 
 # Input parameters as script arguments
 s3_path = Path(sys.argv[1])  # Path to folder containing S3 images
@@ -26,35 +26,49 @@ image_list = []
 with open(str(coords_file), "r") as csvfile:
     rdr = csv.reader(csvfile, delimiter=",")
     coords = next(rdr)
-    next(rdr)
     for row in rdr:
         image_list.append(row[0])
 
 # Run the extraction from S3
 image_classify = []
 for image in image_list:
-    image_name = image + '.SEN3/xfdumanifest.xml'
+
+    # Find matching image in raw image file
+    image_name = next(x for x in s3_path.iterdir() if
+                      image.split('_')[7] in x.name)
+    print(image)
 
     # Open SNAP product
-    prod = open_prod(str(s3_path / image_name))
+    prod = open_prod(str(image_name))
 
     # Get pixel position in image
     px, py = pixel_position(prod, float(coords[1]),
                             float(coords[2]))
-    if not px or not py:
-        image_classify.append((image, 0))
 
-    else:
+    # Test a subset in case the pixel is on the edge of image
+    try:
+        prod_sub = subset(prod, float(coords[1]),
+                          float(coords[2]), copyMetadata="true")
+        exception_flag = False
+    except Exception:
+        image_classify.append((image, 1))
+        exception_flag = True
 
-        # Query radiance band at pixel position
-        radiance01 = prod.getBand('Oa01_radiance')
-        radiance01.loadRasterData()
-        radiance_value = radiance01.getPixelFloat(px, py)
-
-        if math.isnan(radiance_value):
+    if not exception_flag:
+        if not px or not py:
             image_classify.append((image, 0))
+
         else:
-            image_classify.append((image, 1))
+
+            # Query radiance band at pixel position
+            radiance01 = prod.getBand('Oa01_radiance')
+            radiance01.loadRasterData()
+            radiance_value = radiance01.getPixelFloat(px, py)
+
+            if math.isnan(radiance_value) or radiance_value < 0:
+                image_classify.append((image, 0))
+            else:
+                image_classify.append((image, 1))
 
 # Save output
 with open(str(output_file), 'w') as out:
