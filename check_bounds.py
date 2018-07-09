@@ -34,21 +34,22 @@ image_classify = []
 for image in image_list:
 
     # Find matching image in raw image file
-    image_name = next(x for x in s3_path.iterdir() if
-                      image.split('_')[7] in x.name)
+    image_name = next(
+        x for x in s3_path.iterdir() if image.split("_")[7] in x.name
+    )
     print(image)
 
     # Open SNAP product
     prod = open_prod(str(image_name))
 
     # Get pixel position in image
-    px, py = pixel_position(prod, float(coords[1]),
-                            float(coords[2]))
+    px, py = pixel_position(prod, float(coords[1]), float(coords[2]))
 
     # Test a subset in case the pixel is on the edge of image
     try:
-        prod_sub = subset(prod, float(coords[1]),
-                          float(coords[2]), copyMetadata="true")
+        prod_sub = subset(
+            prod, float(coords[1]), float(coords[2]), copyMetadata="true"
+        )
         exception_flag = False
     except Exception:
         image_classify.append((image, 1))
@@ -61,7 +62,7 @@ for image in image_list:
         else:
 
             # Query radiance band at pixel position
-            radiance01 = prod.getBand('Oa01_radiance')
+            radiance01 = prod.getBand("Oa01_radiance")
             radiance01.loadRasterData()
             radiance_value = radiance01.getPixelFloat(px, py)
 
@@ -71,7 +72,7 @@ for image in image_list:
                 image_classify.append((image, 1))
 
 # Save output
-with open(str(output_file), 'w') as out:
+with open(str(output_file), "w") as out:
     csv_out = csv.writer(out)
     csv_out.writerow(coords)
     for row in image_classify:
