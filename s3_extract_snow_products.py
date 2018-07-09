@@ -20,7 +20,6 @@ image_list = []
 with open(str(coords_file), "r") as csvfile:
     rdr = csv.reader(csvfile, delimiter=",")
     coords = next(rdr)
-    next(rdr)
     for row in rdr:
         image_list.append(row[0])
 
@@ -30,8 +29,10 @@ albedo_df = pd.DataFrame()
 # Run the extraction from S3 and put results in dataframe
 for image in image_list:
     print(image)
-    image_name = image + '.SEN3/xfdumanifest.xml'
-    output = getS3values(str(s3_path / image_name), float(coords[1]),
+    image_name = next(x for x in s3_path.iterdir() if
+                      image.split('_')[7] in x.name)
+
+    output = getS3values(str(image_name), float(coords[1]),
                          float(coords[2]))
     idx = datetime.strptime(image.split('_')[7], '%Y%m%dT%H%M%S')
     alb_df = pd.DataFrame(output, index=[idx])
