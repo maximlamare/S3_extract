@@ -30,7 +30,8 @@ albedo_df = pd.DataFrame()
 for image in image_list:
     print(image)
     image_name = next(
-        x for x in s3_path.iterdir() if image.split("_")[7] in x.name
+        x for x in s3_path.iterdir() if image.split("_")[7] + '_' +
+        image.split("_")[8] in x.name
     )
 
     output = getS3values(str(image_name), float(coords[1]), float(coords[2]))
