@@ -9,7 +9,7 @@ From an input csv containing:
 
 - on the first line: title, lat, lon
 
-- on the following lines: a list of image names (see __s3_tools__ repository),
+- on the following lines: a list of image names (see __s3_tools__ (https://github.com/maximlamare/s3_tools) repository),
 
 and a folder containing the S3 OLCI images,
 
