@@ -110,58 +110,24 @@ def subset(in_prod, inlat, inlon, copyMetadata="true"):
 
 
 def snap_snow_albedo(
-    in_prod,
+    prod,
+    pollution_flag,
+    pollution_delta,
+    gains,
     ndsi_flag="false",
-    ndsi_thres="0.03",
-    pollution_flag="false",
-    pollution_delta="0.1",
-    pollution_params="false",
-    ppa_flag="false",
-    copyrefl="true",
-    refwvl="1020.0",
-    gains=True,
+    ndsi_thres="0.03",  # NDSI threshold
+    pollution_params="false",  # Write pollution parameters
+    pollution_uncertainties="false",  # Write pollution uncertainties
+    deltabrr="0.01",  # Delta rBRR for uncertainties
+    ppa_flag="false",  # Calculate PPA
+    copyrefl="true",  # Copy rBRR bands to product
+    refwvl="1020.0",  # Reference wvl for albedo calculation
+    cloud_mask_name="cloud_over_snow",
 ):
-    """ Snow Albedo Processor v2.0.3"""
 
-    # Empty HashMap
-    parameters = HashMap()
+    """ Snow Albedo Processor v2.0.6"""
 
-    # Put parameters for snow albedo processor
-
-    # Band list for output (for the moment hard code 21 bands)
-    bandlist = "Oa01 (400 nm),Oa02 (412.5 nm),Oa03 (442.5 nm),Oa04 (490 nm),"\
-               "Oa05 (510 nm),Oa06 (560 nm),Oa07 (620 nm),Oa08 (665 nm),Oa09"\
-               " (673.75 nm),Oa10 (681.25 nm),Oa11 (708.75 nm),Oa12 (753.75 "\
-               "nm),Oa13 (761.25 nm),Oa14 (764.375 nm),Oa15 (767.5 nm),Oa16 "\
-               "(778.75 nm),Oa17 (865 nm),Oa18 (885 nm),Oa19 (900 nm),Oa20 ("\
-               "940 nm),Oa21 (1020 nm)"
-
-    parameters.put("spectralAlbedoTargetBands", bandlist)
-
-    # Cloud mask name
-    # parameters.put("cloudMaskBandName", cloud_mask_name)
-
-    # Consider NDSI mask
-    parameters.put("considerNdsiSnowMask", ndsi_flag)
-
-    # NDSI threshold
-    parameters.put("ndsiThresh", ndsi_thres)
-
-    # Consider snow pollution
-    parameters.put("considerSnowPollution", pollution_flag)
-    parameters.put("pollutionDelta", pollution_delta)
-    parameters.put("writeAdditionalSnowPollutionParms", pollution_params)
-
-    # PPA
-    parameters.put("computePPA", ppa_flag)
-
-    # Reflectance
-    parameters.put("copyReflectanceBands", copyrefl)
-
-    # Select reference wvl to compute the albedo
-    parameters.put("refWvl", refwvl)
-
-    # Choose gains or not
+    # Set gain values and run processor
     if gains:
         gain_b1 = "0.9798"
         gain_b5 = "0.9892"
@@ -173,16 +139,57 @@ def snap_snow_albedo(
         gain_b17 = "1"
         gain_b21 = "1"
 
+    # Empty HashMap
+    parameters = HashMap()
+
+    # Put parameters for snow albedo processor
+
+    # Cloud mask name
+    parameters.put("cloudMaskBandName", cloud_mask_name)
+
+    # Consider NDSI mask
+    parameters.put("considerNdsiSnowMask", ndsi_flag)
+
+    # NDSI threshold
+    parameters.put("ndsiThresh", ndsi_thres)
+
+    # Consider snow pollution
+    parameters.put("considerSnowPollution", pollution_flag)
+    parameters.put("pollutionDelta", pollution_delta)
+    parameters.put("writeAdditionalSnowPollutionParms", pollution_params)
+    parameters.put("writeUncertaintiesOfAdditionalSnowPollutionParms",
+                   pollution_uncertainties)
+    parameters.put("deltaBrr", deltabrr)
+
+    # PPA
+    parameters.put("computePPA", ppa_flag)
+
+    # Reflectance
+    parameters.put("copyReflectanceBands", copyrefl)
+
+    # Select reference wvl to compute the albedo
+    parameters.put("refWvl", refwvl)
+
     # Hard coded gains for band 1 and 21
     parameters.put("olciGainBand1", gain_b1)
     parameters.put("olciGainBand5", gain_b5)
     parameters.put("olciGainBand17", gain_b17)
     parameters.put("olciGainBand21", gain_b21)
 
-    # Run the Albedo computation
-    albedo_prod = GPF.createProduct("OLCI.SnowAlbedo", parameters, in_prod)
+    # Band list for output (for the moment hard code 21 bands)
+    bandlist = "Oa01 (400 nm),Oa02 (412.5 nm),Oa03 (442.5 nm),Oa04 (490 nm)," \
+               "Oa05 (510 nm),Oa06 (560 nm),Oa07 (620 nm),Oa08 (665 nm),Oa09" \
+               " (673.75 nm),Oa10 (681.25 nm),Oa11 (708.75 nm),Oa12 (753.75 " \
+               "nm),Oa13 (761.25 nm),Oa14 (764.375 nm),Oa15 (767.5 nm),Oa16 " \
+               "(778.75 nm),Oa17 (865 nm),Oa18 (885 nm),Oa19 (900 nm),Oa20 (" \
+               "940 nm),Oa21 (1020 nm)"
 
-    return albedo_prod
+    parameters.put("spectralAlbedoTargetBands", bandlist)
+
+    # Run the Albedo computation
+    albedo = GPF.createProduct("OLCI.SnowProperties", parameters, prod)
+
+    return albedo
 
 
 def ndsi_pixel(in_prod, pix_coords):
@@ -214,7 +221,16 @@ def idepix_cloud(in_prod, xpix, ypix):
     return cloudband.getPixelInt(xpix, ypix)
 
 
-def getS3values(in_file, lat, lon):
+def getTiePointGrid_value(inprod, tpg_name, xx, yy):
+
+    tpg = inprod.getTiePointGrid(tpg_name)
+    tpg.readRasterDataFully()
+
+    return tpg.getPixelFloat(yy, xx)
+
+
+def getS3values(in_file, lat, lon, snow_pollution,
+                pollution_delta, gains=True):
     """ Read the input S3 file and run the S3 OLCI SNOW processor for a given
         location.
         INPUTS:
@@ -230,41 +246,59 @@ def getS3values(in_file, lat, lon):
     prod_subset, pix_coords = subset(prod, lat, lon)
 
     if not prod_subset:
-
-        out_values = {
-            "albedo_bb_planar_sw": None,
-            "grain_diameter": None,
-            "ice_indicator": None,
-            "snow_specific_area": None,
-            "albedo_spectral_planar_1020": None,
-            "rBRR_21": None,
-            "ndsi": None,
-            "auto_cloud": None,
-        }
+        out_values = None  # None if location not in product
     else:
         # Run the S3 OLCI SNOW processor on the subset
-        albedo_prod = snap_snow_albedo(prod_subset)
+        snap_albedo = snap_snow_albedo(prod_subset, snow_pollution,
+                                       pollution_delta, gains)
+
+        # Get RBRR band names and spectral planar bands
+        rbrr_bands = [
+            x for x in list(snap_albedo.getBandNames()) if "BRR" in x
+        ]
+        planar_bands = [
+            x
+            for x in list(snap_albedo.getBandNames())
+            if "spectral_planar" in x
+        ]
+        bb_bands = [x for x in list(snap_albedo.getBandNames())
+                    if "albedo_bb" in x]
+
+        alb_bands = rbrr_bands + planar_bands + bb_bands
 
         # Extract values from albedo product
         out_values = {
-            "albedo_bb_planar_sw": None,
             "grain_diameter": None,
             "ice_indicator": None,
             "snow_specific_area": None,
-            "albedo_spectral_planar_1020": None,
-            "rBRR_21": None,
         }
+
+        # Read geometry from the tie point grids
+        vza = getTiePointGrid_value(prod_subset, "OZA", pix_coords[0],
+                                    pix_coords[1])
+        vaa = getTiePointGrid_value(prod_subset, "OAA", pix_coords[0],
+                                    pix_coords[1])
+        saa = getTiePointGrid_value(prod_subset, "SAA", pix_coords[0],
+                                    pix_coords[1])
+        sza = getTiePointGrid_value(prod_subset, "SZA", pix_coords[0],
+                                    pix_coords[1])
+
+        for item in alb_bands:
+            out_values.update({item: None})
 
         for key in out_values:
             item = next(
-                x for x in list(albedo_prod.getBandNames()) if key in x
+                x for x in list(snap_albedo.getBandNames()) if key in x
             )
             currentband = None
-            currentband = albedo_prod.getBand(item)
+            currentband = snap_albedo.getBand(item)
             currentband.loadRasterData()
             out_values[key] = round(
                 currentband.getPixelFloat(pix_coords[0], pix_coords[1]), 4
             )
+
+        # Update geometry
+        out_values.update({"sza": sza, "vza": vza, "vaa": vaa, "saa": saa})
 
         # Calculate ndsi at pixel of interest
         out_values.update({"ndsi": ndsi_pixel(prod_subset, pix_coords)})
