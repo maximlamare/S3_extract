@@ -82,4 +82,5 @@ The following optional inputs can be specified:
 
 **Example run:**
 
-    python s3_extract_snow_products.py -i "/path/to/folder/containing/S3/folders" -c "/path/to/input/csvfile.csv" -o "/path/to/output/folder" -p false -d 0.05 -g false
+    python s3_extract_snow_products.py -i "/path/to/folder/containing/S3/folders"\
+    -c "/path/to/input/csvfile.csv" -o "/path/to/output/folder" -p false -d 0.05 -g false
