@@ -269,28 +269,13 @@ def snap_snow_albedo(
     return albedo
 
 
-def ndsi_pixel(in_prod, pix_coords):
-    """Calculate an NDSI from the input product based on the bands described
-       in the S3 SNOW ATBD"""
-
-    visband = in_prod.getBand("Oa17_radiance")
-    nirband = in_prod.getBand("Oa21_radiance")
-
-    visband.loadRasterData()
-    vis_value = visband.getPixelFloat(pix_coords[0], pix_coords[1])
-    nirband.loadRasterData()
-    nir_value = nirband.getPixelFloat(pix_coords[0], pix_coords[1])
-
-    return (vis_value - nir_value) / (vis_value + nir_value)
-
-
 def idepix_cloud(in_prod, xpix, ypix):
     """ Run the experimental cloud over snow processor and return
         a flag. 1 = probable cloud, 0 = no cloud """
     parameters = HashMap()
     parameters.put("demBandName", "band_1")
     idepix_cld = GPF.createProduct(
-        "Idepix.Sentinel3.Olci.S3Snow", parameters, in_prod
+        "Snap.Idepix.Olci.S3Snow", parameters, in_prod
     )
     cloudband = idepix_cld.getBand("cloud_over_snow")
     cloudband.loadRasterData()
@@ -348,6 +333,7 @@ def getS3values(in_file, coords, snow_pollution, pollution_delta, gains):
             out_values = {
                 "grain_diameter": None,
                 "ndbi": None,
+                "ndsi": None,
                 "snow_specific_area": None,
             }
 
@@ -413,13 +399,10 @@ def getS3values(in_file, coords, snow_pollution, pollution_delta, gains):
                     }
                 )
 
-            # Calculate ndsi at pixel of interest
-            out_values.update({"ndsi": ndsi_pixel(prod_subset, pix_coords)})
-
             # Add experimental cloud over snow result
-            # out_values.update({"auto_cloud": idepix_cloud(prod_subset,
-            #                    pix_coords[0],
-            #                    pix_coords[1])})
+            out_values.update({"auto_cloud": idepix_cloud(prod_subset,
+                                                          pix_coords[0],
+                                                          pix_coords[1])})
 
             # Update the full dictionnary
             stored_vals.update({coord[0]: out_values})

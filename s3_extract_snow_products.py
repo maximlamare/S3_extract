@@ -126,7 +126,8 @@ def main(sat_fold, coords_file, out_fold, pollution, delta_pol, gains):
         "grain_diameter",
         "snow_specific_area",
         "ndsi",
-        "ndbi",  # 'autocloud'
+        "ndbi",
+        'auto_cloud',
         "sza",
         "vza",
         "saa",
