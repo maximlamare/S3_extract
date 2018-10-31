@@ -3,7 +3,7 @@
 
 Current S3Snow processor version: 2.0.10
 
-This algorithm is designed to extract the outputs from the S3 OLCI SNOW processor for a list of specified coordinates, and for a list on S3 OLCI scenes.
+This algorithm is designed to extract the outputs from the S3 OLCI SNOW processor from a list of Sentinal 3 OLCI images, for a list of specified coordinates.
 
 Please note that **SNAP 7** and the following experiemental SNAP plugins are required:
 
@@ -26,6 +26,11 @@ The *s3_extract_snow_products* script, developed for the [S34Sci Land Study 1: S
 # Requirements and setup
 The processing of the Sentinel 3 images is performed with [snappy](https://senbox.atlassian.net/wiki/spaces/SNAP/pages/19300362/How+to+use+the+SNAP+API+from+Python): the SNAP Java API from Python. The installation of the libraries is detailed below.
 The use of Anaconda is strongly recommended to run the scripts provided in this repository, and the installation steps provided assume the use of a Conda environment.
+
+Note: there are 2 braches on this repository:
+
+1. the master branch is designed for Mac OS
+2. the linux branch is designed for Linux systems
 
 _Setup steps (not tested on Windows):_
 
