@@ -5,6 +5,12 @@ Current S3Snow processor version: 2.0.10
 
 This algorithm is designed to extract the outputs from the S3 OLCI SNOW processor for a list of specified coordinates, and for a list on S3 OLCI scenes.
 
+Please note that **SNAP 7** and the following experiemental SNAP plugins are required:
+
+ - s3tbx-snow-2.0.10-SNAPSHOT
+ - s3tbx-olci-o2corr-0.81-SNAPSHOT
+ - s3tbx-idepix-olci-s3snow-0.81-SNAPSHOT
+
 # Content
 
 1. [Introduction](#intro)
@@ -25,7 +31,7 @@ _Setup steps (not tested on Windows):_
 
 1. You can get Anaconda or Miniconda [here](https://www.anaconda.com/download)
 3. The current version of the script was designed to work with Python 3.4 or 3.5: other versions are not guaranteed to work.
-4. After SNAP Desktop is installed on your computer,  configure snappy with your Conda environment Python (the hardest part). The instructions are found [here](https://senbox.atlassian.net/wiki/spaces/SNAP/pages/50855941/Configure+Python+to+use+the+SNAP-Python+snappy+interface). First, make sure JDK is installed on your system and JDK_HOME path is set.
+4. After SNAP Desktop (version 7) and the required plugins are installed on your computer,  configure snappy with your Conda environment Python (the hardest part). The instructions are found [here](https://senbox.atlassian.net/wiki/spaces/SNAP/pages/50855941/Configure+Python+to+use+the+SNAP-Python+snappy+interface). First, make sure JDK is installed on your system and JDK_HOME path is set.
 
 For MacOS users @mankoff created a neat installation guide (similar on linux systems):
 
@@ -84,3 +90,4 @@ The following optional inputs can be specified:
 
     python s3_extract_snow_products.py -i "/path/to/folder/containing/S3/folders"\
     -c "/path/to/input/csvfile.csv" -o "/path/to/output/folder" -p false -d 0.05 -g false
+
