@@ -275,7 +275,7 @@ def idepix_cloud(in_prod, xpix, ypix):
     parameters = HashMap()
     parameters.put("demBandName", "band_1")
     idepix_cld = GPF.createProduct(
-        "Snap.Idepix.Olci.S3Snow", parameters, in_prod
+        "Idepix.Sentinel3.Olci.S3Snow", parameters, in_prod
     )
     cloudband = idepix_cld.getBand("cloud_over_snow")
     cloudband.loadRasterData()

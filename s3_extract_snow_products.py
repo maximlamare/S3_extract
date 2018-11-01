@@ -5,6 +5,7 @@ Extract S3 OLCI SNOW processor results from S3 OLCI images
 Written by Maxim Lamare
 """
 import sys
+from os import devnull
 from pathlib import Path
 from argparse import ArgumentParser, ArgumentTypeError
 import csv
@@ -79,109 +80,155 @@ def main(sat_fold, coords_file, out_fold, pollution, delta_pol, gains):
         for row in rdr:
             coords.append((row[0], float(row[1]), float(row[2])))
 
-    # To store results, make a dictionnary with sites as keys
-    all_site = dict.fromkeys([x[0] for x in coords], pd.DataFrame())
+    counter = 1  # Set counter
+
+    # Set the path of the log file for failed processing
+    output_errorfile = out_fold / "failed_log.txt"
 
     # Run the extraction from S3 and put results in dataframe
     for sat_image in sat_fold.iterdir():
-        print(sat_image)
-        # Satellite image's full path
-        s3path = sat_image / "xfdumanifest.xml"
 
-        # Extract S3 data for the coordinates contained in the images
-        s3_results = getS3values(
-            str(s3path), coords, pollution, delta_pol, gains
-        )
+        # To store results, make a dictionnary with sites as keys
+        all_site = dict.fromkeys([x[0] for x in coords], pd.DataFrame())
 
-        # Get time from the satellite image folder (quicker than reading the
-        # xml file)
-        sat_date = datetime.strptime(
-            sat_image.name.split("_")[7], "%Y%m%dT%H%M%S"
-        )
+        total_images = len(list(sat_fold.glob('*')))
 
-        # Put the data from the image into a panda dataframe
-        for site in s3_results:
-            alb_df = pd.DataFrame(s3_results[site], index=[sat_date])
+        print("Processed image n°%s/%s: %s" % (counter, total_images,
+                                               sat_image.name))
 
-            # Append date and time columns
-            alb_df["year"] = int(sat_date.year)
-            alb_df["month"] = int(sat_date.month)
-            alb_df["day"] = int(sat_date.day)
-            alb_df["hour"] = int(sat_date.hour)
-            alb_df["minute"] = int(sat_date.minute)
-            alb_df["second"] = int(sat_date.second)
+        try:
 
-            # Add the image data to the general dataframe
-            all_site[site] = all_site[site].append(alb_df)
+            # Satellite image's full path
+            s3path = sat_image / "xfdumanifest.xml"
 
-    # After the images were processed, reorder the data for output
-    # Reorder pandas columns
+            # Extract S3 data for the coordinates contained in the images
+            s3_results = getS3values(
+                    str(s3path), coords, pollution, delta_pol, gains
+                )
+
+            # Get time from the satellite image folder (quicker than reading
+            # the xml file)
+            sat_date = datetime.strptime(
+                sat_image.name.split("_")[7], "%Y%m%dT%H%M%S"
+            )
+
+            # Put the data from the image into a panda dataframe
+            for site in s3_results:
+                alb_df = pd.DataFrame(s3_results[site], index=[sat_date])
+
+                # Append date and time columns
+                alb_df["year"] = int(sat_date.year)
+                alb_df["month"] = int(sat_date.month)
+                alb_df["day"] = int(sat_date.day)
+                alb_df["hour"] = int(sat_date.hour)
+                alb_df["minute"] = int(sat_date.minute)
+                alb_df["second"] = int(sat_date.second)
+
+                # Add the image data to the general dataframe
+                all_site[site] = all_site[site].append(alb_df)
+
+                # Save to file to avoid storing in memory
+                fname = "%s_tmp.csv" % site
+                output_file = out_fold / fname
+
+                # Save dataframe to the csv file
+                # Save header if first write
+                if output_file.is_file():
+                    all_site[site].to_csv(
+                        str(output_file),
+                        mode="a",
+                        na_rep=-999,
+                        header=False,
+                        index=False,
+                    )
+                else:
+                    all_site[site].to_csv(
+                        str(output_file),
+                        mode="a",
+                        na_rep=-999,
+                        header=True,
+                        index=False,
+                    )
+
+        except Exception:
+            print("Unable to process scene: %s" % sat_image.name)
+
+            # Write image name to the log
+            with open(str(output_errorfile), 'a') as fd:
+                fd.write(sat_image.name)
+
+        counter += 1  # Increment counter
+
+    # After having run the process for the images, reopen the temp files
+    # and sort the data correctly
+
+    # Set column order for sorted files
     columns = [
-        "year",
-        "month",
-        "day",
-        "hour",
-        "minute",
-        "second",
-        "grain_diameter",
-        "snow_specific_area",
-        "ndsi",
-        "ndbi",
-        'auto_cloud',
-        "sza",
-        "vza",
-        "saa",
-        "vaa",
+                    "year",
+                    "month",
+                    "day",
+                    "hour",
+                    "minute",
+                    "second",
+                    "grain_diameter",
+                    "snow_specific_area",
+                    "ndsi",
+                    "ndbi",
+                    'auto_cloud',
+                    "sza",
+                    "vza",
+                    "saa",
+                    "vaa",
+                ]
+    # Get all rBRR, albedo and reflectance bands and natural sort
+    alb_columns = [
+        x for x in all_site[site].columns if "albedo_bb" in x
     ]
+    alb_columns.sort(key=natural_keys)
+    rbrr_columns = [x for x in all_site[site].columns if "BRR" in x]
+    rbrr_columns.sort(key=natural_keys)
+    planar_albedo_columns = [
+        x for x in all_site[site].columns if "spectral_planar" in x
+    ]
+    planar_albedo_columns.sort(key=natural_keys)
+    rtoa_columns = [
+        x for x in all_site[site].columns if "reflectance" in x
+    ]
+    rtoa_columns.sort(key=natural_keys)
 
-    for site in all_site:
-        if not all_site[site].empty:
+    # Open temp files
+    for location in coords:
 
-            # Get all rBRR, albedo and reflectance bands and natural sort
-            alb_columns = [
-                x for x in all_site[site].columns if "albedo_bb" in x
-            ]
-            alb_columns.sort(key=natural_keys)
-            rbrr_columns = [x for x in all_site[site].columns if "BRR" in x]
-            rbrr_columns.sort(key=natural_keys)
-            planar_albedo_columns = [
-                x for x in all_site[site].columns if "spectral_planar" in x
-            ]
-            planar_albedo_columns.sort(key=natural_keys)
-            rtoa_columns = [
-                x for x in all_site[site].columns if "reflectance" in x
-            ]
-            rtoa_columns.sort(key=natural_keys)
+        # Read the csv file to a pandas dataframe
+        csv_name = "%s_tmp.csv" % location[0]
+        incsv = out_fold / csv_name
+
+        if incsv.is_file():
+            temp_df = pd.read_csv(str(incsv), sep=',', )
 
             # Reorder dataframe colmuns
-            all_site[site] = all_site[site][
-                columns
-                + alb_columns
-                + rtoa_columns
-                + rbrr_columns
-                + planar_albedo_columns
-            ]
+            temp_df = temp_df[columns + alb_columns + rtoa_columns + rbrr_columns + planar_albedo_columns]
 
-            # Sort in the order of dates
-            all_site[site].sort_index(inplace=True)
+            # Reorder dates
+            temp_df['dt'] = pd.to_datetime(temp_df[['year', 'month', 'day',
+                                                    'hour',
+                                                    'minute', 'second']])
+            temp_df.set_index('dt', inplace=True)
+            temp_df.sort_index(inplace=True)
 
-            # Save the header information to a csv file for each site
-            fname = "%s.csv" % site
+            # Save reordered file
+            fname = "%s.csv" % location[0]
             output_file = out_fold / fname
 
-            # Write header to csv
-            with open(str(output_file), "w") as outcsv:
-                wr = csv.writer(outcsv)
-                wr.writerow([site])
-
             # Save dataframe to the csv file
-            all_site[site].to_csv(
-                str(output_file),
-                mode="a",
-                na_rep=-999,
-                header=True,
-                index=False,
-            )
+            temp_df.to_csv(
+                            str(output_file),
+                            mode="a",
+                            na_rep=-999,
+                            header=True,
+                            index=False,
+                        )
+            incsv.unlink()  # Remove temporary file
 
 
 if __name__ == "__main__":
