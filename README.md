@@ -31,10 +31,13 @@ Note: there are 2 braches on this repository:
 1. the master branch is designed for Mac OS
 2. the linux branch is designed for Linux systems
 
+There is currently no support for Windows systems.
+
 _Setup steps (not tested on Windows):_
 
 1. You can get Anaconda or Miniconda [here](https://www.anaconda.com/download)
-3. The current version of the script was designed to work with Python 3.4 or 3.5: other versions are not guaranteed to work.
+2. The current version of the script was designed to work with Python 3.4 or 3.5: other versions are not guaranteed to work.
+3. Install SNAP Desktop (version 7) and the S3Snow plugins. See the [SUM](https://s3tbx-snow.readthedocs.io/en/latest/)
 4. After SNAP Desktop (version 7) and the required plugins are installed on your computer,  configure snappy with your Conda environment Python (the hardest part). The instructions are found [here](https://senbox.atlassian.net/wiki/spaces/SNAP/pages/50855941/Configure+Python+to+use+the+SNAP-Python+snappy+interface). First, make sure JDK is installed on your system and JDK_HOME path is set.
 
 For MacOS users @mankoff created a neat installation guide (similar on linux systems):
