@@ -283,6 +283,41 @@ def idepix_cloud(in_prod, xpix, ypix):
     return cloudband.getPixelInt(xpix, ypix)
 
 
+def dem_extract(in_prod, xpix, ypix, bandname="altitude"):
+    """Run the S3 SNOW DEM tool.
+
+    Args:
+        inprod (java.lang.Object): snappy java object: SNAP image product
+        xpix (float): x position in product to query
+        ypix (float): y position in product to query
+        bandname (str): DEM band name in product
+
+    Returns:
+        slope_vals (dictionnary): values from all bands at the given x,y"""
+
+    # Initialise a HashMap
+    parameters = HashMap()
+
+    parameters.put("elevationBandName", bandname)
+    parameters.put("copyElevationBand", "true")
+
+    # Run slope operator
+    s3snow_slope = GPF.createProduct(
+        "SlopeCalculation", parameters, in_prod
+    )
+
+    # Initialise dictionnary to store data
+    slope_vals = {}
+
+    # Get all bands
+    for band in list(s3snow_slope.getBandNames()):
+        currentband = s3snow_slope.getBand(band)
+        currentband.loadRasterData()
+        slope_vals[band] = currentband.getPixelFloat(xpix, ypix)
+
+    return slope_vals
+
+
 def getTiePointGrid_value(inprod, tpg_name, xx, yy):
 
     tpg = inprod.getTiePointGrid(tpg_name)
@@ -291,7 +326,8 @@ def getTiePointGrid_value(inprod, tpg_name, xx, yy):
     return tpg.getPixelFloat(yy, xx)
 
 
-def getS3values(in_file, coords, snow_pollution, pollution_delta, gains):
+def getS3values(in_file, coords, snow_pollution, pollution_delta, gains,
+                dem_prods):
     """Extract data from S3 SNOW.
 
     Read the input S3 file and run the S3 OLCI SNOW processor for the
@@ -303,6 +339,7 @@ def getS3values(in_file, coords, snow_pollution, pollution_delta, gains):
         pollution (bool): S3 SNOW dirty snow flag
         delta_pol (int): Delta value to consider dirty snow in S3 SNOW
         gains (bool): Consider vicarious calibration gains
+        dem_prods (bool): Run the S3 Snow DEM slope plugin
         """
     # Make a dictionnary to store results
     stored_vals = {}
@@ -324,6 +361,7 @@ def getS3values(in_file, coords, snow_pollution, pollution_delta, gains):
         else:
             # Fetch the TOA reflectance for the image
             toa_refl = rad2refl(prod_subset)
+
             # Run the S3 OLCI SNOW processor on the subset
             snap_albedo = snap_snow_albedo(
                 prod_subset, snow_pollution, pollution_delta, gains
@@ -403,6 +441,12 @@ def getS3values(in_file, coords, snow_pollution, pollution_delta, gains):
             out_values.update({"auto_cloud": idepix_cloud(prod_subset,
                                                           pix_coords[0],
                                                           pix_coords[1])})
+            # Run the DEM product as an options
+            if dem_prods:
+                dem_values = dem_extract(prod_subset, pix_coords[0],
+                                         pix_coords[1])
+                # Merge DEM dictionnary
+                out_values = {**out_values, **dem_values}
 
             # Update the full dictionnary
             stored_vals.update({coord[0]: out_values})
