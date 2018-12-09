@@ -51,7 +51,7 @@ For MacOS users @mankoff created an installation guide (similar on Linux systems
 
     # install pandas
     conda install pandas
-    
+
     # install jpy
     cd /local/folder/of/your/choice
     git clone https://github.com/bcdev/jpy.git
@@ -81,7 +81,7 @@ Run  `python s3_extract_snow_products.py -h` for help.
 The scripts needs the following obligatory inputs:
 
  - ***-i, --input***: the path to the folder containing unzipped S3 OLCI L1C granules (scenes). Each unzipped folder (.SEN3) contains the NetCDF data files (.nc) and an XML file (.xml).
- - ***-c, --coords***: the path to a file containing the coordinates of the pixels values to extract from the S3 images. The file should be in a .csv format with each row containing: *Name, lat, lon*, with the latitude and longitude in degrees (EPSG:4326). I.E; Inukjuak, 58.4550, -78.1037 
+ - ***-c, --coords***: the path to a file containing the coordinates of the pixels values to extract from the S3 images. The file should be in a .csv format with each row containing: *Name, lat, lon*, with the latitude and longitude in degrees (EPSG:4326). I.E; Inukjuak, 58.4550, -78.1037
  - **-o, --output:** the path to the output folder, where a .csv file for each site will be created, containing the output values from the S3Snow processor. A list of the S3 scenes for which the algorithm failed is created in a separate file. See note below.
 
 The following optional inputs can be specified:
@@ -91,6 +91,10 @@ The following optional inputs can be specified:
  - ***-d, --delta_p***: set the trigger to activate snow polluted mode. If the pollution flag is activated, and if the difference between the measured reflectance and the theoretical reflectance for clean snow is lower than the specified *delta_p* value, the polluted snow algorithm is activated. If the difference is smaller than the *delta_p*, the snow is considered clean and the polluted snow algorithm is not activated. Has no effect if the pollution flag is turned off.
 
  - **-g, --gains:** multiply the Bottom-of-Atmosphere reflectance by the gains specified by the [Ocean Color SVC](https://www.eumetsat.int/website/wcm/idc/idcplg?IdcService=GET_FILE&dDocName=PDF_S3A_PN_OLCI_L2&RevisionSelectionMethod=LatestReleased&Rendition=Web) before calculating albedo. Expert option only: it is not recommended to activate this option. To activate the use of the gains: `"yes", "true", "t", "y", or "1"`. To deactivate the use of the gains: `"no", "false", "f", "n", or "0"`. By default, the gains flag is deactivated.
+
+ - **-e, --elevation:** run the S3Snow slope processor that calculates the elevation, slope, aspect, and subpixel variance from the DEM. The algorithm currently uses the default DEM band that is provided within the S3 OLCI product. To run the slope processor use: `"yes", "true", "t", "y", or "1"`. To run the algorithm without the aforementioned variables in the output specify the options: `"no", "false", "f", "n", or "0"`. By default, the option is turned off.
+
+ - **-r, --recovery:** run the algorithm in recovery mode. If the processing stopped in the middle of a run for some reason, the output temporary files are not sorted. The recovery mode will attempt to convert the temporary files to final files, therefore reducing the number of images to re-process the next time. A manual selection of the unprocessed scenes in the input folder will be necessary to run only the unprocessed scenes after recovery mode (don't forget to save the recovery mode output files elsewhere or they will be overwritten). In recovery mode, the **elevation** flag has to be set to the value of the failed run otherwise the code will crash. Activate recovery mode by setting the flag to `"yes", "true", "t", "y", or "1"`. To run in normal mode: `"no", "false", "f", "n", or "0"`. By default, the option is turned off.
 
 **Example run:**
 
@@ -109,4 +113,3 @@ The output csv file contains:
 - TOA reflectance for the 21 bands (Oa_reflectance)
 - BOA reflectance for the 21 bands (rBRR)
 - Spectral planar albedo for the 21 bands
-
