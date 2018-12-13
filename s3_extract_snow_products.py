@@ -90,8 +90,12 @@ def main(sat_fold, coords_file, out_fold, pollution, delta_pol, gains,
             raise Exception("No temporary files found!")  # TODO check
         else:
             # Get the sites that have a temporary file to salvage
-            coords = [x for x in coords if
-                      any([x.split("_")[0] for x in tmp_files]) in x]
+            selected_coords = []
+            for tmp in tmp_files:
+                selected_coords.append(next(x for x in coords if
+                                            x[0] == tmp.split("_")[0]))
+            # Overwrite coords variable for later generic processing
+            coords = selected_coords
 
     # If not in recovery mode, then process as normal
     else:
