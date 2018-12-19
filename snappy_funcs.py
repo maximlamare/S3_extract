@@ -326,6 +326,24 @@ def getTiePointGrid_value(inprod, tpg_name, xx, yy):
     return tpg.getPixelFloat(yy, xx)
 
 
+def merge2dicts(x, y):
+    """Merge two dictionnaries
+
+    Merges two existing dictionnaries, returning a new one.
+
+    Args:
+        x (dict): First dictionnary to merge
+        y (dict): Second dictionnary to merge
+
+    Returns:
+        (dict): Merged dictionnary"""
+
+    z = x.copy()   # start with x's keys and values
+    z.update(y)    # modifies z with y's keys and values & returns None
+
+    return z
+
+
 def getS3values(in_file, coords, snow_pollution, pollution_delta, gains,
                 dem_prods):
     """Extract data from S3 SNOW.
@@ -446,7 +464,7 @@ def getS3values(in_file, coords, snow_pollution, pollution_delta, gains,
                 dem_values = dem_extract(prod_subset, pix_coords[0],
                                          pix_coords[1])
                 # Merge DEM dictionnary
-                out_values = {**out_values, **dem_values}
+                out_values = merge2dicts(out_values, dem_values)
 
             # Update the full dictionnary
             stored_vals.update({coord[0]: out_values})
