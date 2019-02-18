@@ -6,7 +6,7 @@ Snappy based functions
 import math
 
 # Import SNAP libraries
-from snappy import ProductIO, GeoPos, PixelPos, HashMap, GPF
+from snappy import ProductIO, GeoPos, PixelPos, HashMap, GPF, jpy, Mask
 
 
 def open_prod(inpath):
@@ -90,36 +90,28 @@ def subset(inprod, inlat, inlon, subset_size=3, copyMetadata="true"):
     # Get pixel position in the product and retrieve x,y.
     xx, yy = pixel_position(inprod, inlat, inlon)
 
-    # If problem with geocoding return None
-    if not xx or not yy:
-        prod_subset = subx = suby = None
+    # Subset around point
+    area = [
+        xx - subset_size, yy - subset_size, subset_size * 2, subset_size * 2
+    ]
 
-    else:
-        # Subset around point
-        area = [
-            xx - subset_size,
-            yy - subset_size,
-            subset_size * 2,
-            subset_size * 2,
-        ]
+    # Empty HashMap
+    parameters = HashMap()
 
-        # Empty HashMap
-        parameters = HashMap()
+    # Convert area list to string readable by the processor
+    areastr = ",".join(str(e) for e in area)
 
-        # Convert area list to string readable by the processor
-        areastr = ",".join(str(e) for e in area)
+    # Subset parameters
+    parameters.put("region", areastr)
+    parameters.put("subSamplingX", "1")
+    parameters.put("subSamplingY", "1")
+    parameters.put("copyMetadata", copyMetadata)
 
-        # Subset parameters
-        parameters.put("region", areastr)
-        parameters.put("subSamplingX", "1")
-        parameters.put("subSamplingY", "1")
-        parameters.put("copyMetadata", copyMetadata)
+    # Create subset using operator
+    prod_subset = GPF.createProduct("Subset", parameters, inprod)
 
-        # Create subset using operator
-        prod_subset = GPF.createProduct("Subset", parameters, inprod)
-
-        # Get pixel position in the subset (and therefore other products)
-        subx, suby = pixel_position(prod_subset, inlat, inlon)
+    # Get pixel position in the subset (and therefore other products)
+    subx, suby = pixel_position(prod_subset, inlat, inlon)
 
     return prod_subset, (subx, suby)
 
@@ -302,9 +294,7 @@ def dem_extract(in_prod, xpix, ypix, bandname="altitude"):
     parameters.put("copyElevationBand", "true")
 
     # Run slope operator
-    s3snow_slope = GPF.createProduct(
-        "SlopeCalculation", parameters, in_prod
-    )
+    s3snow_slope = GPF.createProduct("SlopeCalculation", parameters, in_prod)
 
     # Initialise dictionnary to store data
     slope_vals = {}
@@ -338,14 +328,30 @@ def merge2dicts(x, y):
     Returns:
         (dict): Merged dictionnary"""
 
-    z = x.copy()   # start with x's keys and values
-    z.update(y)    # modifies z with y's keys and values & returns None
+    z = x.copy()  # start with x's keys and values
+    z.update(y)  # modifies z with y's keys and values & returns None
 
     return z
 
 
-def getS3values(in_file, coords, snow_pollution, pollution_delta, gains,
-                dem_prods):
+def get_valid_mask(xx, yy, prod):
+
+    valid_mask = prod.getMaskGroup().get("quality_flags_invalid")
+
+    valid_mask_asmask = jpy.cast(valid_mask, Mask)
+
+    return valid_mask_asmask.getSampleInt(xx, yy)
+
+
+def getS3values(
+    in_file,
+    coords,
+    snow_pollution,
+    pollution_delta,
+    gains,
+    dem_prods,
+    errorfile,
+):
     """Extract data from S3 SNOW.
 
     Read the input S3 file and run the S3 OLCI SNOW processor for the
@@ -365,108 +371,138 @@ def getS3values(in_file, coords, snow_pollution, pollution_delta, gains,
     # Open SNAP product
     prod = open_prod(in_file)
 
-    # Loop over coordinates to extract value. Need to think if there is a
-    # quicker way of processing the images...
+    # Loop over coordinates to extract values.
     for coord in coords:
 
-        # Save resources by working on a small subset around each
-        # coordinates pair contained within the S3 scene. Doesn't process if
-        # the coordinates pair is not in the product
-        prod_subset, pix_coords = subset(prod, coord[1], coord[2])
+        # Check if data exists at the queried location
+        # Transform lat/lon to position to x, y in scene
+        xx, yy = pixel_position(prod, coord[1], coord[2])
 
-        if not prod_subset:
-            out_values = None  # None if location not in product
+        # Ignore if location is outside of file
+        if not xx or not yy:
+            pass
+        # Log if coordinate is in file but invalid pixel
+        elif get_valid_mask(xx, yy, prod) == 255:
+            with open(str(errorfile), "a") as fd:
+                fd.write(
+                    "%s, %s: Invalid pixel.\n" % (prod.getName(), coord[0])
+                )
         else:
-            # Fetch the TOA reflectance for the image
-            toa_refl = rad2refl(prod_subset)
 
-            # Run the S3 OLCI SNOW processor on the subset
-            snap_albedo = snap_snow_albedo(
-                prod_subset, snow_pollution, pollution_delta, gains
-            )
+            # Save resources by working on a small subset around each
+            # coordinates pair contained within the S3 scene. Doesn't process
+            # if the coordinates pair is not in the product
+            prod_subset, pix_coords = subset(prod, coord[1], coord[2])
 
-            # Extract values from albedo product
-            out_values = {
-                "grain_diameter": None,
-                "ndbi": None,
-                "ndsi": None,
-                "snow_specific_area": None,
-            }
-
-            # Add band names to extract to the dictionnary
-            rbrr_bands = [
-                x for x in list(snap_albedo.getBandNames()) if "BRR" in x
-            ]
-            planar_bands = [
-                x
-                for x in list(snap_albedo.getBandNames())
-                if "spectral_planar" in x
-            ]
-            bb_bands = [
-                x for x in list(snap_albedo.getBandNames()) if "albedo_bb" in x
-            ]
-            alb_bands = rbrr_bands + planar_bands + bb_bands
-            for item in alb_bands:
-                out_values.update({item: None})
-
-            # Update albedo values
-            for key in out_values:
-                item = next(
-                    x for x in list(snap_albedo.getBandNames()) if key in x
+            if not prod_subset:
+                out_values = None  # None if location not in product
+                fd.write(
+                    "%s, %s: Unable to subset,"
+                    " too close to the edge.\n" % (prod.getName(), coord[0])
                 )
-                currentband = None
-                currentband = snap_albedo.getBand(item)
-                currentband.loadRasterData()
-                out_values[key] = round(
-                    currentband.getPixelFloat(pix_coords[0], pix_coords[1]), 4
+            else:
+                # Fetch the TOA reflectance for the image
+                toa_refl = rad2refl(prod_subset)
+
+                # Run the S3 OLCI SNOW processor on the subset
+                snap_albedo = snap_snow_albedo(
+                    prod_subset, snow_pollution, pollution_delta, gains
                 )
 
-            # Read geometry from the tie point grids
-            vza = getTiePointGrid_value(
-                prod_subset, "OZA", pix_coords[0], pix_coords[1]
-            )
-            vaa = getTiePointGrid_value(
-                prod_subset, "OAA", pix_coords[0], pix_coords[1]
-            )
-            saa = getTiePointGrid_value(
-                prod_subset, "SAA", pix_coords[0], pix_coords[1]
-            )
-            sza = getTiePointGrid_value(
-                prod_subset, "SZA", pix_coords[0], pix_coords[1]
-            )
+                # Extract values from albedo product
+                out_values = {
+                    "grain_diameter": None,
+                    "ndbi": None,
+                    "ndsi": None,
+                    "snow_specific_area": None,
+                }
 
-            # Update geometry
-            out_values.update({"sza": sza, "vza": vza, "vaa": vaa, "saa": saa})
+                # Add band names to extract to the dictionnary
+                rbrr_bands = [
+                    x for x in list(snap_albedo.getBandNames()) if "BRR" in x
+                ]
+                planar_bands = [
+                    x
+                    for x in list(snap_albedo.getBandNames())
+                    if "spectral_planar" in x
+                ]
+                bb_bands = [
+                    x
+                    for x in list(snap_albedo.getBandNames())
+                    if "albedo_bb" in x
+                ]
+                alb_bands = rbrr_bands + planar_bands + bb_bands
+                for item in alb_bands:
+                    out_values.update({item: None})
 
-            # Get TOA Reflectance and update dictionnary
-            toa_refl_bands = list(toa_refl.getBandNames())
-            for bnd in toa_refl_bands:
-                currentband = None
-                currentband = toa_refl.getBand(bnd)
-                currentband.loadRasterData()
+                # Update albedo values
+                for key in out_values:
+                    item = next(
+                        x for x in list(snap_albedo.getBandNames()) if key in x
+                    )
+                    currentband = None
+                    currentband = snap_albedo.getBand(item)
+                    currentband.loadRasterData()
+                    out_values[key] = round(
+                        currentband.getPixelFloat(
+                            pix_coords[0], pix_coords[1]
+                        ),
+                        4,
+                    )
+
+                # Read geometry from the tie point grids
+                vza = getTiePointGrid_value(
+                    prod_subset, "OZA", pix_coords[0], pix_coords[1]
+                )
+                vaa = getTiePointGrid_value(
+                    prod_subset, "OAA", pix_coords[0], pix_coords[1]
+                )
+                saa = getTiePointGrid_value(
+                    prod_subset, "SAA", pix_coords[0], pix_coords[1]
+                )
+                sza = getTiePointGrid_value(
+                    prod_subset, "SZA", pix_coords[0], pix_coords[1]
+                )
+
+                # Update geometry
+                out_values.update(
+                    {"sza": sza, "vza": vza, "vaa": vaa, "saa": saa}
+                )
+
+                # Get TOA Reflectance and update dictionnary
+                toa_refl_bands = list(toa_refl.getBandNames())
+                for bnd in toa_refl_bands:
+                    currentband = None
+                    currentband = toa_refl.getBand(bnd)
+                    currentband.loadRasterData()
+                    out_values.update(
+                        {
+                            bnd: round(
+                                currentband.getPixelFloat(
+                                    pix_coords[0], pix_coords[1]
+                                ),
+                                4,
+                            )
+                        }
+                    )
+
+                # Add experimental cloud over snow result
                 out_values.update(
                     {
-                        bnd: round(
-                            currentband.getPixelFloat(
-                                pix_coords[0], pix_coords[1]
-                            ),
-                            4,
+                        "auto_cloud": idepix_cloud(
+                            prod_subset, pix_coords[0], pix_coords[1]
                         )
                     }
                 )
+                # Run the DEM product as an options
+                if dem_prods:
+                    dem_values = dem_extract(
+                        prod_subset, pix_coords[0], pix_coords[1]
+                    )
+                    # Merge DEM dictionnary
+                    out_values = merge2dicts(out_values, dem_values)
 
-            # Add experimental cloud over snow result
-            out_values.update({"auto_cloud": idepix_cloud(prod_subset,
-                                                          pix_coords[0],
-                                                          pix_coords[1])})
-            # Run the DEM product as an options
-            if dem_prods:
-                dem_values = dem_extract(prod_subset, pix_coords[0],
-                                         pix_coords[1])
-                # Merge DEM dictionnary
-                out_values = merge2dicts(out_values, dem_values)
-
-            # Update the full dictionnary
-            stored_vals.update({coord[0]: out_values})
+                # Update the full dictionnary
+                stored_vals.update({coord[0]: out_values})
 
     return stored_vals

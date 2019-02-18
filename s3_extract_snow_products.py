@@ -131,70 +131,67 @@ def main(
             total_images = len(satfolders)
 
             print(
-                "Processed image n°%s/%s: %s"
+                "Processing image n°%s/%s: %s"
                 % (counter, total_images, sat_image.name)
             )
 
-            try:
+            # Satellite image's full path
+            s3path = sat_image / "xfdumanifest.xml"
 
-                # Satellite image's full path
-                s3path = sat_image / "xfdumanifest.xml"
+            # Extract S3 data for the coordinates contained in the images
+            s3_results = getS3values(
+                str(s3path),
+                coords,
+                pollution,
+                delta_pol,
+                gains,
+                dem_prods,
+                output_errorfile,
+            )
 
-                # Extract S3 data for the coordinates contained in the images
-                s3_results = getS3values(
-                    str(s3path), coords, pollution, delta_pol, gains, dem_prods
-                )
+            # Get time from the satellite image folder (quicker than
+            # reading the xml file)
+            sat_date = datetime.strptime(
+                sat_image.name.split("_")[7], "%Y%m%dT%H%M%S"
+            )
 
-                # Get time from the satellite image folder (quicker than
-                # reading the xml file)
-                sat_date = datetime.strptime(
-                    sat_image.name.split("_")[7], "%Y%m%dT%H%M%S"
-                )
+            # Put the data from the image into a panda dataframe
+            for site in s3_results:
+                alb_df = pd.DataFrame(s3_results[site], index=[sat_date])
 
-                # Put the data from the image into a panda dataframe
-                for site in s3_results:
-                    alb_df = pd.DataFrame(s3_results[site], index=[sat_date])
+                # Append date and time columns
+                alb_df["year"] = int(sat_date.year)
+                alb_df["month"] = int(sat_date.month)
+                alb_df["day"] = int(sat_date.day)
+                alb_df["hour"] = int(sat_date.hour)
+                alb_df["minute"] = int(sat_date.minute)
+                alb_df["second"] = int(sat_date.second)
 
-                    # Append date and time columns
-                    alb_df["year"] = int(sat_date.year)
-                    alb_df["month"] = int(sat_date.month)
-                    alb_df["day"] = int(sat_date.day)
-                    alb_df["hour"] = int(sat_date.hour)
-                    alb_df["minute"] = int(sat_date.minute)
-                    alb_df["second"] = int(sat_date.second)
+                # Add the image data to the general dataframe
+                all_site[site] = all_site[site].append(alb_df)
 
-                    # Add the image data to the general dataframe
-                    all_site[site] = all_site[site].append(alb_df)
+                # Save to file to avoid storing in memory
+                fname = "%s_tmp.csv" % site
+                output_file = out_fold / fname
 
-                    # Save to file to avoid storing in memory
-                    fname = "%s_tmp.csv" % site
-                    output_file = out_fold / fname
-
-                    # Save dataframe to the csv file
-                    # Save header if first write
-                    if output_file.is_file():
-                        all_site[site].to_csv(
-                            str(output_file),
-                            mode="a",
-                            na_rep=-999,
-                            header=False,
-                            index=False,
-                        )
-                    else:
-                        all_site[site].to_csv(
-                            str(output_file),
-                            mode="a",
-                            na_rep=-999,
-                            header=True,
-                            index=False,
-                        )
-
-            except Exception:
-                print("Unable to process scene: %s" % sat_image.name)
-
-                # Write image name to the log
-                with open(str(output_errorfile), "a") as fd:
-                    fd.write(sat_image.name + "\n")
+                # Save dataframe to the csv file
+                # Save header if first write
+                if output_file.is_file():
+                    all_site[site].to_csv(
+                        str(output_file),
+                        mode="a",
+                        na_rep=-999,
+                        header=False,
+                        index=False,
+                    )
+                else:
+                    all_site[site].to_csv(
+                        str(output_file),
+                        mode="a",
+                        na_rep=-999,
+                        header=True,
+                        index=False,
+                    )
 
             counter += 1  # Increment counter
 
