@@ -82,6 +82,7 @@ def main(
     """
     # Initialise the list of coordinates
     coords = []
+
     # Open the list of coordinates to be processed
     with open(str(coords_file), "r") as f:
         rdr = csv.reader(f)
@@ -95,14 +96,15 @@ def main(
         tmp_files = [x.name for x in out_fold.iterdir() if "tmp" in x.name]
 
         if tmp_files is None:
-            raise Exception("No temporary files found!")  # TODO check
+            raise Exception("No temporary files found!")
         else:
             # Get the sites that have a temporary file to salvage
             selected_coords = []
             for tmp in tmp_files:
-                selected_coords.append(
-                    next(x for x in coords if x[0] == tmp.split("_")[0])
-                )
+                for x in coords:
+                    if x[0] == tmp.split("_tmp")[0]:
+                        selected_coords.append(x)
+
             # Overwrite coords variable for later generic processing
             coords = selected_coords
 
@@ -245,7 +247,7 @@ def main(
             planar_albedo_columns.sort(key=natural_keys)
             rtoa_columns = [x for x in temp_df.columns if "reflectance" in x]
             rtoa_columns.sort(key=natural_keys)
-            print(columns)
+
             # Reorder dataframe colmuns
             temp_df = temp_df[
                 columns

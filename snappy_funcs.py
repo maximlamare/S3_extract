@@ -378,7 +378,7 @@ def getS3values(
         # Transform lat/lon to position to x, y in scene
         xx, yy = pixel_position(prod, coord[1], coord[2])
 
-        # Ignore if location is outside of file
+        # Log if location is outside of file
         if not xx or not yy:
             pass
         # Log if coordinate is in file but invalid pixel
@@ -392,15 +392,29 @@ def getS3values(
             # Save resources by working on a small subset around each
             # coordinates pair contained within the S3 scene. Doesn't process
             # if the coordinates pair is not in the product
-            prod_subset, pix_coords = subset(prod, coord[1], coord[2])
+            try:
+                prod_subset, pix_coords = subset(prod, coord[1], coord[2])
 
-            if not prod_subset:
-                out_values = None  # None if location not in product
-                fd.write(
-                    "%s, %s: Unable to subset,"
-                    " too close to the edge.\n" % (prod.getName(), coord[0])
-                )
-            else:
+                if not prod_subset or not pix_coords[0]:
+                    out_values = None  # None if location not in product
+                    prod_subset = None  # None to stop processing
+                    with open(str(errorfile), "a") as fd:
+                        fd.write(
+                            "%s, %s: Unable to subset,"
+                            " too close to the edge.\n"
+                            % (prod.getName(), coord[0])
+                        )
+
+            except:  # Bare except needed to catch the JAVA exception
+                with open(str(errorfile), "a") as fd:
+                    fd.write(
+                        "%s, %s: Corrupt file or"
+                        " SNAP issue.\n" % (prod.getName(), coord[0])
+                    )
+                prod_subset = None  # Set a marker to ignore rest of processing
+
+            if prod_subset:  # Run the processing if subset exists
+
                 # Fetch the TOA reflectance for the image
                 toa_refl = rad2refl(prod_subset)
 
@@ -504,5 +518,18 @@ def getS3values(
 
                 # Update the full dictionnary
                 stored_vals.update({coord[0]: out_values})
+
+                # Garbage collector
+                prod_subset.dispose()
+                snap_albedo.dispose()
+                toa_refl.dispose()
+
+    # Log if no sites are found in image
+    if not stored_vals:
+        with open(str(errorfile), "a") as fd:
+            fd.write("%s: No sites in image.\n" % (prod.getName()))
+
+    # Garbage collector
+    prod.dispose()
 
     return stored_vals
