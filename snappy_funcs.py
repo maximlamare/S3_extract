@@ -381,6 +381,7 @@ def getS3values(
         # Transform lat/lon to position to x, y in scene
         xx, yy = pixel_position(prod, coord[1], coord[2])
 
+        # Test if the pixel is valid (in the scene and not in the image border)
         try:
             mask = get_valid_mask(xx, yy, prod)
         except:  # Bare except needed to catch the JAVA exception
