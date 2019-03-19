@@ -2,7 +2,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 
 
-Current S3Snow processor version: 2.0.11
+Current S3Snow processor version: 2.1
 
 The S3_extract algorithm is designed to extract the outputs from the S3 OLCI SNOW processor from a list of Sentinel-3 (Hereafter “S3”) OLCI imagery, for a named list of user-defined lat lon coordinates.
 
@@ -11,6 +11,12 @@ The work requires **SNAP 7** and the following experimental SNAP plugins:
  - s3tbx-snow-2.0.10-SNAPSHOT
  - s3tbx-olci-o2corr-0.81-SNAPSHOT
  - s3tbx-idepix-olci-s3snow-0.81-SNAPSHOT
+
+Code developed within the **Sentinel-3 for Science, Land Study 1: Snow**   project led by Jason Box. More information at [snow.geus.dk](http://snow.geus.dk/).
+
+Development and testing: Maxim Lamare and Jason Box.
+
+
 
 # Content
 
@@ -113,3 +119,4 @@ The output csv file contains:
 - TOA reflectance for the 21 bands (Oa_reflectance)
 - BOA reflectance for the 21 bands (rBRR)
 - Spectral planar albedo for the 21 bands
+
