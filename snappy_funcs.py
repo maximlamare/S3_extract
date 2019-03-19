@@ -92,7 +92,10 @@ def subset(inprod, inlat, inlon, subset_size=3, copyMetadata="true"):
 
     # Subset around point
     area = [
-        xx - subset_size, yy - subset_size, subset_size * 2, subset_size * 2
+        xx - subset_size,
+        yy - subset_size,
+        subset_size * 2,
+        subset_size * 2,
     ]
 
     # Empty HashMap
