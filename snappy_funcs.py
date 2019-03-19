@@ -378,11 +378,16 @@ def getS3values(
         # Transform lat/lon to position to x, y in scene
         xx, yy = pixel_position(prod, coord[1], coord[2])
 
+        try:
+            mask = get_valid_mask(xx, yy, prod)
+        except:  # Bare except needed to catch the JAVA exception
+            mask = 255
+
         # Log if location is outside of file
         if not xx or not yy:
             pass
         # Log if coordinate is in file but invalid pixel
-        elif get_valid_mask(xx, yy, prod) == 255:
+        elif mask == 255:
             with open(str(errorfile), "a") as fd:
                 fd.write(
                     "%s, %s: Invalid pixel.\n" % (prod.getName(), coord[0])
