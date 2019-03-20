@@ -466,12 +466,15 @@ def getS3values(
                     currentband = None
                     currentband = snap_albedo.getBand(item)
                     currentband.loadRasterData()
-                    out_values[key] = round(
-                        currentband.getPixelFloat(
-                            pix_coords[0], pix_coords[1]
-                        ),
-                        4,
-                    )
+                    try:
+                        out_values[key] = round(
+                            currentband.getPixelFloat(
+                                pix_coords[0], pix_coords[1]
+                            ),
+                            4,
+                        )
+                    except:  # Bare except to catch Java RuntimeError
+                        out_values[key] = -999
 
                 # Read geometry from the tie point grids
                 vza = getTiePointGrid_value(
@@ -498,16 +501,19 @@ def getS3values(
                     currentband = None
                     currentband = toa_refl.getBand(bnd)
                     currentband.loadRasterData()
-                    out_values.update(
-                        {
-                            bnd: round(
-                                currentband.getPixelFloat(
-                                    pix_coords[0], pix_coords[1]
-                                ),
-                                4,
-                            )
-                        }
-                    )
+                    try:
+                        out_values.update(
+                            {
+                                bnd: round(
+                                    currentband.getPixelFloat(
+                                        pix_coords[0], pix_coords[1]
+                                    ),
+                                    4,
+                                )
+                            }
+                        )
+                    except:  # Bare except to catch Java RuntimeError
+                        out_values.update({bnd: -999})
 
                 # Add experimental cloud over snow result
                 out_values.update(
