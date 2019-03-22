@@ -448,8 +448,10 @@ def getS3values(
 
                 except:  # Bare except needed to catch the JAVA exception
                     with open(str(errorfile), "a") as fd:
-                        fd.write("%s, %s: Invalid pixel.\n" %
-                                 (prod.getName(), coord[0]))
+                        fd.write(
+                            "%s, %s: Invalid pixel.\n"
+                            % (prod.getName(), coord[0])
+                        )
                     processing = False
 
                 if processing:
@@ -468,8 +470,9 @@ def getS3values(
 
                     # Add band names to extract to the dictionnary
                     rbrr_bands = [
-                        x for x in list(
-                            snap_albedo.getBandNames()) if "BRR" in x
+                        x
+                        for x in list(snap_albedo.getBandNames())
+                        if "BRR" in x
                     ]
                     planar_bands = [
                         x
@@ -488,8 +491,9 @@ def getS3values(
                     # Update albedo values
                     for key in out_values:
                         item = next(
-                            x for x in list(
-                                snap_albedo.getBandNames()) if key in x
+                            x
+                            for x in list(snap_albedo.getBandNames())
+                            if key in x
                         )
                         currentband = None
                         currentband = snap_albedo.getBand(item)
@@ -539,10 +543,12 @@ def getS3values(
                         )
 
                     # Add experimental cloud over snow result
-                    out_values.update({"auto_cloud": idepix_cloud(
-                        prod_subset, pix_coords[0], pix_coords[1]
-                    )
-                    }
+                    out_values.update(
+                        {
+                            "auto_cloud": idepix_cloud(
+                                prod_subset, pix_coords[0], pix_coords[1]
+                            )
+                        }
                     )
 
                     # Run the DEM product as an options
