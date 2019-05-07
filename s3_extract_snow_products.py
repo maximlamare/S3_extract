@@ -61,6 +61,7 @@ def main(
     gains,
     dem_prods,
     recovery,
+    idepix_only,
 ):
     """S3 OLCI extract.
 
@@ -149,6 +150,7 @@ def main(
                 gains,
                 dem_prods,
                 output_errorfile,
+                idepix_only,
             )
 
             # Get time from the satellite image folder (quicker than
@@ -236,26 +238,37 @@ def main(
         if incsv.is_file():
             temp_df = pd.read_csv(str(incsv), sep=",")
 
-            # Get all rBRR, albedo and reflectance bands and natural sort
-            alb_columns = [x for x in temp_df.columns if "albedo_bb" in x]
-            alb_columns.sort(key=natural_keys)
-            rbrr_columns = [x for x in temp_df.columns if "BRR" in x]
-            rbrr_columns.sort(key=natural_keys)
-            planar_albedo_columns = [
-                x for x in temp_df.columns if "spectral_planar" in x
-            ]
-            planar_albedo_columns.sort(key=natural_keys)
-            rtoa_columns = [x for x in temp_df.columns if "reflectance" in x]
-            rtoa_columns.sort(key=natural_keys)
+            if idepix_only:
 
-            # Reorder dataframe colmuns
-            temp_df = temp_df[
-                columns
-                + alb_columns
-                + rtoa_columns
-                + rbrr_columns
-                + planar_albedo_columns
-            ]
+                # Get idepix flags
+                idepix_columns = [x for x in temp_df.columns if "IDEPIX" in x]
+
+                # Reorder dataframe columns
+                temp_df = temp_df[columns[0:6] + idepix_columns]
+
+            else:
+                # Get all rBRR, albedo and reflectance bands and natural sort
+                alb_columns = [x for x in temp_df.columns if "albedo_bb" in x]
+                alb_columns.sort(key=natural_keys)
+                rbrr_columns = [x for x in temp_df.columns if "BRR" in x]
+                rbrr_columns.sort(key=natural_keys)
+                planar_albedo_columns = [
+                    x for x in temp_df.columns if "spectral_planar" in x
+                ]
+                planar_albedo_columns.sort(key=natural_keys)
+                rtoa_columns = [
+                    x for x in temp_df.columns if "reflectance" in x
+                ]
+                rtoa_columns.sort(key=natural_keys)
+
+                # Reorder dataframe colmuns
+                temp_df = temp_df[
+                    columns
+                    + alb_columns
+                    + rtoa_columns
+                    + rbrr_columns
+                    + planar_albedo_columns
+                ]
 
             # Reorder dates
             temp_df["dt"] = pd.to_datetime(
@@ -291,8 +304,7 @@ if __name__ == "__main__":
     else:
         # Parse Arguments from command line
         parser = ArgumentParser(
-            description="Import parameters for the complex"
-            " terrain algrithm."
+            description="Import parameters for the complex" " terrain algrithm."
         )
 
         parser.add_argument(
@@ -362,6 +374,13 @@ if __name__ == "__main__":
             default=False,
             help="Boolean condition: run the recovery mode to salvage data.",
         )
+        parser.add_argument(
+            "--idepix_only",
+            metavar="Idepix cloud extraction",
+            type=str2bool,
+            default=False,
+            help="Boolean condition: run the idepix module only.",
+        )
 
         input_args = parser.parse_args()
 
@@ -375,4 +394,5 @@ if __name__ == "__main__":
             input_args.gains,
             input_args.elevation,
             input_args.recovery,
+            input_args.idepix_only,
         )
