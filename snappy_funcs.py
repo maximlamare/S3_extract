@@ -405,6 +405,8 @@ def getS3values(
     dem_prods,
     errorfile,
     idepix_only,
+    s3_instrument="OLCI",
+    slstr_res=None,
 ):
     """Extract data from S3 SNOW.
 
@@ -425,7 +427,7 @@ def getS3values(
     stored_vals = {}
 
     # Open SNAP product
-    prod = open_prod(in_file)
+    prod = open_prod(in_file, s3_instrument, slstr_res)
 
     # Loop over coordinates to extract values.
     for coord in coords:
