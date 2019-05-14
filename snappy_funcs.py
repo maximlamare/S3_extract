@@ -9,20 +9,40 @@ import math
 from snappy import ProductIO, GeoPos, PixelPos, HashMap, GPF, jpy, Mask
 
 
-def open_prod(inpath):
+def open_prod(inpath, s3_instrument, resolution):
     """Open SNAP product.
 
-     Use SNAP to open a Sentinel 3 product.
+     Use snappy to open a Sentinel-3 product. If the instrument is SLSTR, then 
+     the 2 resolution products are returned (500m and 1km).
 
     Args:
         inpath (str): Path to a S3 OLCI image xfdumanisfest.xml file
+        s3_instrument (str): S3 instrument (OLCI or SLSTR)
+        resolution (str): For SLSTR, resolution of the product to be opened (0.5 or 1 k)
 
     Returns:
         (java.lang.Object): snappy java object: SNAP image product
      """
     # Open satellite product with SNAP
     try:
-        prod = ProductIO.readProduct(inpath)
+        if s3_instrument == "OLCI":
+            prod = ProductIO.readProduct(inpath)
+
+        elif s3_instrument == "SLSTR":
+            # Reader based on input
+            if resolution == "500":
+                reader = ProductIO.getProductReader("Sen3_SLSTRL1B_500m")
+            elif resolution == "1000":
+                reader = ProductIO.getProductReader("Sen3_SLSTRL1B_1km")
+            else:
+                raise ValueError("Wrong SLSTR resolution, set to 500 or 1000m")
+
+            prod = reader.readProductNodes(inpath, None)
+
+        else:
+            raise ValueError(
+                "Only Sentinel-3 OLCI and SLSTR are currently" " supported."
+            )
 
     except IOError:
         print("Error: SNAP cannot read specified file!")
@@ -266,11 +286,11 @@ def snap_snow_albedo(
 
 def idepix_cloud(in_prod, xpix, ypix):
     """ Run the experimental cloud over snow processor.
-    
+
     The function is written based on the Idepix cloud 1.0 plugin. The function
     returns the values from the different cloud bands in the Idepix processor
     output.
-    
+
     Args:
         inprod (java.lang.Object): snappy java object: SNAP image product
         xpix (float): x position in product to query
@@ -610,6 +630,175 @@ def getS3values(
 
                 # Garbage collector
                 prod_subset.dispose()
+
+    # Log if no sites are found in image
+    if not stored_vals:
+        with open(str(errorfile), "a") as fd:
+            fd.write("%s: No sites in image.\n" % (prod.getName()))
+
+    # Garbage collector
+    prod.dispose()
+
+    return stored_vals
+
+
+def getS3bands(
+    in_file, coords, band_names, errorfile, s3_instrument, slstr_res
+):
+    """Extract data from Sentinel-3 bands.
+
+    Read the input S3 file and extract data from a list of given bands for the
+    coordinates (in a provided list) located within the scene.
+
+    Args:
+        in_file (str): Path to a S3 OLCI image xfdumanisfest.xml file.
+        coords (list): List of coordinates to extract the data from.
+        band_names (list): List of bands names to extract the data from.
+        errorfile (str): Path to the file where all errors are logged.
+        s3_instrument (str): Sentinel-3 instrument name (OLCI or SLSTR).
+        slstr_res (str): SLSTR reader resolution (500m or 1km).
+    
+    Returns:
+        (dict): Dictionnary containing the band names and values for all
+        coordinates extracted from the image.
+        """
+    # Make a dictionnary to store results
+    stored_vals = {}
+
+    # Open SNAP product
+    prod = open_prod(in_file, s3_instrument, slstr_res)
+
+    # Loop over coordinates to extract values.
+    for coord in coords:
+
+        # Check if data exists at the queried location
+        # Transform lat/lon to position to x, y in scene
+        xx, yy = pixel_position(prod, coord[1], coord[2])
+
+        # Log if location is outside of file
+        if not xx or not yy:
+            pass
+
+        else:
+            #  For OLCI scenes, save resources by working on a small subset
+            # around each coordinates pair contained within the S3 scene.
+            # Doesn't process if the coordinates pair is not in the product.
+            if s3_instrument == "OLCI":
+                try:
+                    prod_subset, pix_coords = subset(prod, coord[1], coord[2])
+                    process_flag = True  # Set a flag to process data
+
+                except:  # Bare except needed to catch the JAVA exception
+                    with open(str(errorfile), "a") as fd:
+                        fd.write(
+                            "%s, %s: Unable to subset around coordinates.\n"
+                            % (prod.getName(), coord[0])
+                        )
+                        prod_subset = None
+
+                if not prod_subset or pix_coords[0] is None:
+                    process_flag = False  # None to stop processing
+
+                    with open(str(errorfile), "a") as fd:  # Log error
+                        fd.write(
+                            "%s, %s: Unable to subset,"
+                            " too close to the edge.\n"
+                            % (prod.getName(), coord[0])
+                        )
+            else:
+                # If SLSTR, open full image: because of the bands at different
+                # resolutions, a resampling would be necessary before being
+                # able to subset. Therefore set the flag to continue.
+                prod_subset = prod
+                process_flag = True
+                # As th entire scene is used, set pix_coords to xx, yy
+                pix_coords = xx, yy
+
+            if process_flag:  # Run the processing if OLCI subset exists
+                # Before the processing, the validity of the opened product is
+                # tested by opening the first band and querying the band at the
+                # coordinate location. If SLSTR, just test the 500m product.
+                # If the extraction test fails, an entry is created in the log.
+                try:
+                    # Get a specified band depending on the sensor
+                    currentband = None
+                    if s3_instrument == "OLCI":
+                        # Extract pixel value for the band
+                        currentband = prod_subset.getBand("Oa01_radiance")
+                    else:
+                        # Try out with bands for either resolution
+                        currentband = prod_subset.getBand("S1_radiance_an")
+                        if currentband == None:
+                            currentband = prod_subset.getBand("F1_BT_in")
+
+                    currentband.loadRasterData()  # Load raster band
+                    # Test if the retrieval is possible
+                    currentband.getPixelFloat(pix_coords[0], pix_coords[1])
+                    currentband = None
+
+                    # Marker to continue processing
+                    processing = True
+
+                except:  # Bare except needed to catch the JAVA exception
+                    with open(str(errorfile), "a") as fd:
+                        fd.write(
+                            "%s, %s: Invalid pixel.\n"
+                            % (prod_subset.getName(), coord[0])
+                        )
+                    processing = False  # Deactivate processing
+
+                if processing:
+                    out_values = {}  # Initialise outvalues
+
+                    # Extract bands from product
+                    for band in band_names:
+
+                        # Try to extract from band list
+                        if band in list(prod_subset.getBandNames()):
+                            currentband = None
+                            currentband = prod_subset.getBand(band)
+                            currentband.loadRasterData()
+                            out_values[band] = round(
+                                currentband.getPixelFloat(
+                                    pix_coords[0], pix_coords[1]
+                                ),
+                                4,
+                            )
+
+                        # If not in band list, try from TiePointGrid
+                        elif band in list(prod.getTiePointGridNames()):
+                            out_values[band] = round(
+                                getTiePointGrid_value(
+                                    prod_subset,
+                                    band,
+                                    pix_coords[0],
+                                    pix_coords[1],
+                                ),
+                                4,
+                            )
+
+                        # If not if TiePointGrid list try from Masks
+                        elif band in list(
+                            prod_subset.getMaskGroup().getNodeNames()
+                        ):
+                            currentmask = prod_subset.getMaskGroup().get(band)
+                            currentmask_asmask = jpy.cast(currentmask, Mask)
+                            out_values[band] = currentmask_asmask.getSampleInt(
+                                pix_coords[0], pix_coords[1]
+                            )
+
+                        else:
+                            # Capture error
+                            raise SyntaxError(
+                                "Band '%s' does not exist in image: %s"
+                                % (band, prod.getName())
+                            )
+
+                    # Update the full dictionnary
+                    stored_vals.update({coord[0]: out_values})
+
+                    # Garbage collector
+                    prod_subset.dispose()
 
     # Log if no sites are found in image
     if not stored_vals:
