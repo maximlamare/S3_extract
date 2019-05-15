@@ -4,7 +4,10 @@
 
 Current S3Snow processor version: 2.1
 
-The S3_extract algorithm is designed to extract the outputs from the S3 OLCI SNOW processor from a list of Sentinel-3 (Hereafter “S3”) OLCI imagery, for a named list of user-defined lat lon coordinates.
+The repository contains 2 tools:
+
+- *s3_extract_snow_products*: the script is designed to extract the outputs from the S3 OLCI SNOW processor based on a list of Sentinel-3 (Hereafter “S3”) OLCI imagery, for a named list of user-defined lat/lon coordinates.
+- *s3_band_extract*: the script allows to extract values from S3 bands (OLCI or SLSTR) from a list of S3 images for a named list of user-defined lat/lon coordinates.
 
 The work requires **SNAP 7** and the following experimental SNAP plugins:
 
@@ -82,6 +85,8 @@ Note: for advanced users, the Conda environment file is provided in the reposito
 <a name="workflow"></a>
 # Example workflow
 
+## s3_extract_snow_products.py
+
 Run  `python s3_extract_snow_products.py -h` for help.
 
 The scripts needs the following obligatory inputs:
@@ -120,3 +125,28 @@ The output csv file contains:
 - BOA reflectance for the 21 bands (rBRR)
 - Spectral planar albedo for the 21 bands
 
+## s3_band_extract.py
+
+Run  `python s3_band_extract.py -h` for help.
+
+The scripts needs the following obligatory inputs:
+
+ - ***-i, --insat***: the path to the folder containing unzipped S3 OLCI L1C granules (scenes). Each unzipped folder (.SEN3) contains the NetCDF data files (.nc) and an XML file (.xml).
+ - ***-c, --coords***: the path to a file containing the coordinates of the pixels values to extract from the S3 images. The file should be in a .csv format with each row containing: *Name, lat, lon*, with the latitude and longitude in degrees (EPSG:4326). i.e; Inukjuak, 58.4550, -78.1037
+ - **-o, --output:** the path to the output folder, where a .csv file for each site will be created, containing the output values from the S3Snow processor. A list of the S3 scenes for which the algorithm failed is created in a separate file. See note below.
+ - **-b, --bands:** a list of band names for which the data extraction will occur. The bands can be regular bands, TiePointGrids, or Masks. The band names should be listed, separated by a space. For example to extract data from S3 OLCI first two radiance bands: `Oa01_radiance Oa02_radiance`.
+
+The following optional inputs can be specified:
+
+- ***-r, --res***: specifies the reader to be used to open SLSTR images. By default the 500m resolution reader is specified, but the 1km reader can be set using this flag. The flag values can either be `"500"` or `"1000"`. For specific applications only.
+
+**Example run:**
+
+    python s3_band_extract.py -i "/path/to/folder/containing/S3/folders"\
+    -c "/path/to/input/csvfile.csv" -o "/path/to/output/folder" -b Oa01_radiance quality_flags_bright SZA
+
+**Outputs:**
+The output csv file contains:
+
+- Year, Month, Day, Hour, Minute, Second of acquisition.
+- The values for all the bands specified as inputs.
