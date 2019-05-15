@@ -288,8 +288,8 @@ def idepix_cloud(in_prod, xpix, ypix):
     """ Run the experimental cloud over snow processor.
 
     The function is written based on the Idepix cloud 1.0 plugin. The function
-    returns the values from the different cloud bands in the Idepix processor
-    output.
+    returns the values from the Ideoix cloud over snow band in the Idepix
+    processor output.
 
     Args:
         inprod (java.lang.Object): snappy java object: SNAP image product
@@ -302,12 +302,10 @@ def idepix_cloud(in_prod, xpix, ypix):
         "Snap.Idepix.Olci.S3Snow", parameters, in_prod
     )
 
-    # Get Idepix cloud masks
-    cloudmasks = get_cloud_masks(idepix_cld, xpix, ypix)
+    cloudband = idepix_cld.getBand("cloud_over_snow")
+    cloudband.loadRasterData()
 
-    idepix_cld.dispose()
-
-    return cloudmasks
+    return cloudband.getPixelInt(xpix, ypix)
 
 
 def dem_extract(in_prod, xpix, ypix, bandname="altitude"):
@@ -369,24 +367,6 @@ def merge2dicts(x, y):
     return z
 
 
-def get_cloud_masks(inprod, xx, yy):
-
-    # Get a list of the cloud masks
-    cloud_masks = [
-        x for x in list(inprod.getMaskGroup().getNodeNames()) if "IDEPIX" in x
-    ]
-
-    mask_values = {}
-
-    # Extract cloud mask data iteratively
-    for mask in cloud_masks:
-        current_mask = inprod.getMaskGroup().get(mask)
-        current_mask_asmask = jpy.cast(current_mask, Mask)
-        mask_values[mask] = current_mask_asmask.getSampleInt(xx, yy)
-
-    return mask_values
-
-
 def get_valid_mask(inprod, xx, yy):
 
     valid_mask = inprod.getMaskGroup().get("quality_flags_invalid")
@@ -404,7 +384,6 @@ def getS3values(
     gains,
     dem_prods,
     errorfile,
-    idepix_only,
     s3_instrument="OLCI",
     slstr_res=None,
 ):
@@ -421,7 +400,6 @@ def getS3values(
         gains (bool): Consider vicarious calibration gains
         dem_prods (bool): Run the S3 Snow DEM slope plugin
         errorfile (str): Path to the file where all errors are logged
-        idepix_only (bool): Run the Idepix processor alone
         """
     # Make a dictionnary to store results
     stored_vals = {}
@@ -477,147 +455,137 @@ def getS3values(
 
             if prod_subset:  # Run the processing if subset exists
 
-                if not idepix_only:  # Deactivate extraction if only idepix
+                # Fetch the TOA reflectance for the image
+                toa_refl = rad2refl(prod_subset)
 
-                    # Fetch the TOA reflectance for the image
-                    toa_refl = rad2refl(prod_subset)
+                # Some pixel positions in S3 images are considered valid by the
+                # mask (returns 0 and not 255), but are located outside of the
+                # image (in the top or bottom border). It is not possible to
+                # determine the validity of the pixel without querying the
+                # product. Here we query the TOA product and return an entry
+                # in the log if it fails.
+                try:
+                    # Get first TOA band
+                    toa_band1 = list(toa_refl.getBandNames())[0]
 
-                    # Some pixel positions in S3 images are considered valid by the
-                    # mask (returns 0 and not 255), but are located outside of the
-                    # image (in the top or bottom border). It is not possible to
-                    # determine the validity of the pixel without querying the
-                    # product. Here we query the TOA product and return an entry
-                    # in the log if it fails.
-                    try:
-                        # Get first TOA band
-                        toa_band1 = list(toa_refl.getBandNames())[0]
+                    # Extract pixel value for the band
+                    currentband = None
+                    currentband = toa_refl.getBand(toa_band1)
+                    currentband.loadRasterData()
+                    currentband.getPixelFloat(pix_coords[0], pix_coords[1])
+                    currentband = None
 
-                        # Extract pixel value for the band
+                    # Marker to continue processing
+                    processing = True
+
+                except:  # Bare except needed to catch the JAVA exception
+                    with open(str(errorfile), "a") as fd:
+                        fd.write(
+                            "%s, %s: Invalid pixel.\n"
+                            % (prod.getName(), coord[0])
+                        )
+                    processing = False
+
+                if processing:
+                    # Run the S3 OLCI SNOW processor on the subset
+                    snap_albedo = snap_snow_albedo(
+                        prod_subset, snow_pollution, pollution_delta, gains
+                    )
+
+                    # Extract values from albedo product
+                    out_values = {
+                        "grain_diameter": None,
+                        "ndbi": None,
+                        "ndsi": None,
+                        "snow_specific_area": None,
+                    }
+
+                    # Add band names to extract to the dictionnary
+                    rbrr_bands = [
+                        x
+                        for x in list(snap_albedo.getBandNames())
+                        if "BRR" in x
+                    ]
+                    planar_bands = [
+                        x
+                        for x in list(snap_albedo.getBandNames())
+                        if "spectral_planar" in x
+                    ]
+                    bb_bands = [
+                        x
+                        for x in list(snap_albedo.getBandNames())
+                        if "albedo_bb" in x
+                    ]
+                    alb_bands = rbrr_bands + planar_bands + bb_bands
+                    for item in alb_bands:
+                        out_values.update({item: None})
+
+                    # Update albedo values
+                    for key in out_values:
+                        item = next(
+                            x
+                            for x in list(snap_albedo.getBandNames())
+                            if key in x
+                        )
                         currentband = None
-                        currentband = toa_refl.getBand(toa_band1)
+                        currentband = snap_albedo.getBand(item)
                         currentband.loadRasterData()
-                        currentband.getPixelFloat(pix_coords[0], pix_coords[1])
+                        out_values[key] = round(
+                            currentband.getPixelFloat(
+                                pix_coords[0], pix_coords[1]
+                            ),
+                            4,
+                        )
+
+                    # Read geometry from the tie point grids
+                    vza = getTiePointGrid_value(
+                        prod_subset, "OZA", pix_coords[0], pix_coords[1]
+                    )
+                    vaa = getTiePointGrid_value(
+                        prod_subset, "OAA", pix_coords[0], pix_coords[1]
+                    )
+                    saa = getTiePointGrid_value(
+                        prod_subset, "SAA", pix_coords[0], pix_coords[1]
+                    )
+                    sza = getTiePointGrid_value(
+                        prod_subset, "SZA", pix_coords[0], pix_coords[1]
+                    )
+
+                    # Update geometry
+                    out_values.update(
+                        {"sza": sza, "vza": vza, "vaa": vaa, "saa": saa}
+                    )
+
+                    # Get TOA Reflectance and update dictionnary
+                    toa_refl_bands = list(toa_refl.getBandNames())
+                    for bnd in toa_refl_bands:
                         currentband = None
+                        currentband = toa_refl.getBand(bnd)
+                        currentband.loadRasterData()
 
-                        # Marker to continue processing
-                        processing = True
-
-                    except:  # Bare except needed to catch the JAVA exception
-                        with open(str(errorfile), "a") as fd:
-                            fd.write(
-                                "%s, %s: Invalid pixel.\n"
-                                % (prod.getName(), coord[0])
-                            )
-                        processing = False
-
-                    if processing:
-                        # Run the S3 OLCI SNOW processor on the subset
-                        snap_albedo = snap_snow_albedo(
-                            prod_subset, snow_pollution, pollution_delta, gains
-                        )
-
-                        # Extract values from albedo product
-                        out_values = {
-                            "grain_diameter": None,
-                            "ndbi": None,
-                            "ndsi": None,
-                            "snow_specific_area": None,
-                        }
-
-                        # Add band names to extract to the dictionnary
-                        rbrr_bands = [
-                            x
-                            for x in list(snap_albedo.getBandNames())
-                            if "BRR" in x
-                        ]
-                        planar_bands = [
-                            x
-                            for x in list(snap_albedo.getBandNames())
-                            if "spectral_planar" in x
-                        ]
-                        bb_bands = [
-                            x
-                            for x in list(snap_albedo.getBandNames())
-                            if "albedo_bb" in x
-                        ]
-                        alb_bands = rbrr_bands + planar_bands + bb_bands
-                        for item in alb_bands:
-                            out_values.update({item: None})
-
-                        # Update albedo values
-                        for key in out_values:
-                            item = next(
-                                x
-                                for x in list(snap_albedo.getBandNames())
-                                if key in x
-                            )
-                            currentband = None
-                            currentband = snap_albedo.getBand(item)
-                            currentband.loadRasterData()
-                            out_values[key] = round(
-                                currentband.getPixelFloat(
-                                    pix_coords[0], pix_coords[1]
-                                ),
-                                4,
-                            )
-
-                        # Read geometry from the tie point grids
-                        vza = getTiePointGrid_value(
-                            prod_subset, "OZA", pix_coords[0], pix_coords[1]
-                        )
-                        vaa = getTiePointGrid_value(
-                            prod_subset, "OAA", pix_coords[0], pix_coords[1]
-                        )
-                        saa = getTiePointGrid_value(
-                            prod_subset, "SAA", pix_coords[0], pix_coords[1]
-                        )
-                        sza = getTiePointGrid_value(
-                            prod_subset, "SZA", pix_coords[0], pix_coords[1]
-                        )
-
-                        # Update geometry
-                        out_values.update(
-                            {"sza": sza, "vza": vza, "vaa": vaa, "saa": saa}
-                        )
-
-                        # Get TOA Reflectance and update dictionnary
-                        toa_refl_bands = list(toa_refl.getBandNames())
-                        for bnd in toa_refl_bands:
-                            currentband = None
-                            currentband = toa_refl.getBand(bnd)
-                            currentband.loadRasterData()
-
-                            out_values.update(
-                                {
-                                    bnd: round(
-                                        currentband.getPixelFloat(
-                                            pix_coords[0], pix_coords[1]
-                                        ),
-                                        4,
-                                    )
-                                }
-                            )
-
-                        # Add experimental cloud over snow result
                         out_values.update(
                             {
-                                "auto_cloud": idepix_cloud(
-                                    prod_subset, pix_coords[0], pix_coords[1]
-                                )["IDEPIX_CLOUD"]
+                                bnd: round(
+                                    currentband.getPixelFloat(
+                                        pix_coords[0], pix_coords[1]
+                                    ),
+                                    4,
+                                )
                             }
                         )
 
-                        # Garbage collector
-                        snap_albedo.dispose()
-                        toa_refl.dispose()
-
-                else:
-
-                    # Just run the Idepix processor
-                    out_values = {}
+                    # Add experimental cloud over snow result
                     out_values.update(
-                        idepix_cloud(prod_subset, pix_coords[0], pix_coords[1])
+                        {
+                            "auto_cloud": idepix_cloud(
+                                prod_subset, pix_coords[0], pix_coords[1]
+                            )
+                        }
                     )
+
+                    # Garbage collector
+                    snap_albedo.dispose()
+                    toa_refl.dispose()
 
                 # Run the DEM product as an options
                 if dem_prods:
