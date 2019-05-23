@@ -768,7 +768,7 @@ def getS3bands(
                     stored_vals.update({coord[0]: out_values})
 
                     # Garbage collector
-                    prod_subset.dispose()
+                    prod_subset = None
 
     # Log if no sites are found in image
     if not stored_vals:
@@ -776,6 +776,6 @@ def getS3bands(
             fd.write("%s: No sites in image.\n" % (prod.getName()))
 
     # Garbage collector
-    prod.dispose()
+    prod = None
 
     return stored_vals
