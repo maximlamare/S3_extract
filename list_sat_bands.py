@@ -62,7 +62,7 @@ def main(sat_image, out_file,):
 
     # If a file is specified, write to file
     if out_file:
-        with open(out_file, 'w') as f:
+        with open(str(out_file), 'w') as f:
             f.write("File path: %s\n" % str(sat_image.resolve()))
             f.write("\nBand names:\n")
             if band_names:
