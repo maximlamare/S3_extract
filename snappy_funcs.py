@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Snappy based functions
-"""
+"""ESA SNAP python (snappy) based functions."""
 import math
 
 # Import SNAP libraries
@@ -12,13 +10,14 @@ from snappy import ProductIO, GeoPos, PixelPos, HashMap, GPF, jpy, Mask
 def open_prod(inpath, s3_instrument, resolution):
     """Open SNAP product.
 
-     Use snappy to open a Sentinel-3 product. If the instrument is SLSTR, then 
+     Use snappy to open a Sentinel-3 product. If the instrument is SLSTR, then
      the 2 resolution products are returned (500m and 1km).
 
     Args:
         inpath (str): Path to a S3 OLCI image xfdumanisfest.xml file
         s3_instrument (str): S3 instrument (OLCI or SLSTR)
-        resolution (str): For SLSTR, resolution of the product to be opened (0.5 or 1 k)
+        resolution (str): For SLSTR, resolution of the product to be
+            opened (0.5 or 1 k)
 
     Returns:
         (java.lang.Object): snappy java object: SNAP image product
@@ -74,6 +73,10 @@ def pixel_position(inprod, inlat, inlon):
     # If the pixpos coordinates are NaN, the queried position is outside of the
     # image bands
     if math.isnan(pixpos.getX()) or math.isnan(pixpos.getY()):
+        xx = None
+        yy = None
+
+    elif pixpos.getX() <= 0 or pixpos.getY() <= 0:
         xx = None
         yy = None
 
@@ -627,7 +630,7 @@ def getS3bands(
         errorfile (str): Path to the file where all errors are logged.
         s3_instrument (str): Sentinel-3 instrument name (OLCI or SLSTR).
         slstr_res (str): SLSTR reader resolution (500m or 1km).
-    
+
     Returns:
         (dict): Dictionnary containing the band names and values for all
         coordinates extracted from the image.
@@ -698,7 +701,7 @@ def getS3bands(
                     else:
                         # Try out with bands for either resolution
                         currentband = prod_subset.getBand("S1_radiance_an")
-                        if currentband == None:
+                        if currentband is None:
                             currentband = prod_subset.getBand("F1_BT_in")
 
                     currentband.loadRasterData()  # Load raster band
