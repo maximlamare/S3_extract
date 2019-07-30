@@ -18,7 +18,7 @@ def main(sat_image, out_file,):
     """Satellite band list.
 
     The script returns a list of bands that are available in
-    the satellite product in categories (Bands, TiePointGrids, Masks). 
+    the satellite product in categories (Bands, TiePointGrids, Masks).
     Specifiying an output file (optional), saves the
     list to that file.
 

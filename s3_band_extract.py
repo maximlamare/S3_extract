@@ -70,7 +70,8 @@ def main(sat_fold, coords_file, out_fold, inbands, slstr_res):
         s3path = sat_image / "xfdumanifest.xml"
 
         # Parse the image xml file to extract the Sentinel-3 instrument and the
-        # image acquisition start datetime (OLCI FR end-time = startime + 3 min)
+        # image acquisition start datetime (OLCI FR end-time = startime
+        # + 3 min)
         xlm_root = ET.parse(str(s3path)).getroot()
 
         for child in xlm_root.find(".//metadataSection"):
