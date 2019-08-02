@@ -76,7 +76,11 @@ def pixel_position(inprod, inlat, inlon):
         xx = None
         yy = None
 
-    elif pixpos.getX() <= 0 or pixpos.getY() <= 0:
+    # Set coordinates to None if pixpos X/Y is larger than scene width/height 
+    # (or smaller than zero)
+    elif pixpos.getX() <= 0 or pixpos.getY() <= 0  \
+    or pixpos.getX() >= inprod.getSceneRasterWidth() \
+    or pixpos.getY() >= inprod.getSceneRasterHeight():
         xx = None
         yy = None
 
