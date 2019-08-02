@@ -19,7 +19,7 @@ from snappy_funcs import getS3bands
 from s3_extract_snow_products import natural_keys
 
 
-def main(sat_fold, coords_file, out_fold, inbands, slstr_res):
+def main(sat_fold, coords_file, out_fold, inbands, slstr_res, sat_platform):
     """Sentinel-3 band extraction.
 
     Extract a specified list of bands for all images
@@ -60,6 +60,11 @@ def main(sat_fold, coords_file, out_fold, inbands, slstr_res):
 
         # To store results, make a dictionnary with sites as keys
         all_site = dict.fromkeys([x[0] for x in coords], pd.DataFrame())
+
+        # Only process image if it is from the desired platform
+        sat_image_platform = sat_image.name[2]
+        if sat_image_platform != sat_platform and sat_platform != "AB":
+            continue
 
         print(
             "Processing image n°%s/%s: %s"
@@ -116,6 +121,13 @@ def main(sat_fold, coords_file, out_fold, inbands, slstr_res):
             alb_df["minute"] = int(sat_date.minute)
             alb_df["second"] = int(sat_date.second)
 
+            # Append platform ID as numeric value (A=0, B=1)
+            if sat_image_platform == 'A':
+                sat_image_platform_num = 0
+            else:
+                sat_image_platform_num = 1
+            alb_df["platform"] = int(sat_image_platform_num)
+
             # Add the image data to the general dataframe
             all_site[site] = all_site[site].append(alb_df)
 
@@ -148,7 +160,8 @@ def main(sat_fold, coords_file, out_fold, inbands, slstr_res):
     # and sort the data correctly
 
     # Set column order for sorted files
-    dt_columns = ["year", "month", "day", "hour", "minute", "second"]
+    dt_columns = ["year", "month", "day", "hour", "minute", "second", 
+                  "platform"]
 
     # Open temp files
     for location in coords:
@@ -244,6 +257,16 @@ if __name__ == "__main__":
             help="Specify the reader for opening SLSTR images: either the 500m"
             "or the 1km. Options are '500' or '1000', defaults to '500'.",
         )
+        parser.add_argument(
+            "-p",
+            "--platform",
+            metavar="Sentinel-3 satellite platform",
+            required=False,
+            default="AB",
+            help="Specify the Sentinel-3 platform to include data from."
+            "Options are 'A', 'B', or 'AB' (for both platforms).",
+        )
+
 
         input_args = parser.parse_args()
 
@@ -254,4 +277,5 @@ if __name__ == "__main__":
             Path(input_args.output),
             input_args.bands,
             input_args.res,
+            input_args.platform,
         )
