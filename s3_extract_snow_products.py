@@ -61,6 +61,7 @@ def main(
     gains,
     dem_prods,
     recovery,
+    sat_platform
 ):
     """S3 OLCI extract.
 
@@ -117,18 +118,23 @@ def main(
         output_errorfile = out_fold / "failed_log.txt"
 
         # Run the extraction from S3 and put results in dataframe
-
-        # List folders in the satellite image directory
-        satfolders = [
-            x
-            for x in sat_fold.iterdir()
-            if x.is_dir() and x.name.endswith(".SEN3")
-        ]
+        
+        # List folders in the satellite image directory (include all .SEN3 
+        # folders that are located in sub-directories within 'sat_fold')
+        satfolders = []
+        for p in sat_fold.rglob("*"):
+            if p.as_posix().endswith(".SEN3"):
+                satfolders.append(p)
 
         for sat_image in satfolders:
 
             # To store results, make a dictionnary with sites as keys
             all_site = dict.fromkeys([x[0] for x in coords], pd.DataFrame())
+
+            # Only process image if it is from the desired platform
+            sat_image_platform = sat_image.name[2]
+            if sat_image_platform != sat_platform and sat_platform != "AB":
+                continue
 
             total_images = len(satfolders)
 
@@ -168,6 +174,14 @@ def main(
                 alb_df["hour"] = int(sat_date.hour)
                 alb_df["minute"] = int(sat_date.minute)
                 alb_df["second"] = int(sat_date.second)
+                alb_df["dayofyear"] = int(sat_date.timetuple().tm_yday)
+
+                # Append platform ID as numeric value (A=0, B=1)
+                if sat_image_platform == 'A':
+                    sat_image_platform_num = 0
+                else:
+                    sat_image_platform_num = 1
+                alb_df["platform"] = int(sat_image_platform_num)
 
                 # Add the image data to the general dataframe
                 all_site[site] = all_site[site].append(alb_df)
@@ -208,6 +222,8 @@ def main(
         "hour",
         "minute",
         "second",
+        "dayofyear",
+        "platform",
         "grain_diameter",
         "snow_specific_area",
         "ndsi",
@@ -362,6 +378,15 @@ if __name__ == "__main__":
             default=False,
             help="Boolean condition: run the recovery mode to salvage data.",
         )
+        parser.add_argument(
+            "-f",
+            "--platform",
+            metavar="Sentinel-3 atellite platform",
+            required=False,
+            default="AB",
+            help="Specify the Sentinel-3 platform to include data from."
+            "Options are 'A', 'B', or 'AB' (for both platforms).",
+        )
 
         input_args = parser.parse_args()
 
@@ -375,4 +400,5 @@ if __name__ == "__main__":
             input_args.gains,
             input_args.elevation,
             input_args.recovery,
+            input_args.platform,
         )
