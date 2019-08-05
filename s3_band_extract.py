@@ -14,7 +14,6 @@ import pandas as pd
 from datetime import datetime
 import xml.etree.ElementTree as ET
 
-
 from snappy_funcs import getS3bands
 from s3_extract_snow_products import natural_keys
 
@@ -49,12 +48,12 @@ def main(sat_fold, coords_file, out_fold, inbands, slstr_res, sat_platform):
     # Set the path of the log file for failed processing
     output_errorfile = out_fold / "failed_log.txt"
 
-    # List folders in the satellite image directory
-    satfolders = [
-        x
-        for x in sat_fold.iterdir()
-        if x.is_dir() and x.name.endswith(".SEN3")
-    ]
+    # List folders in the satellite image directory (include all .SEN3 folders
+    # that are located in sub-directories within 'sat_fold')
+    satfolders = []
+    for p in sat_fold.rglob("*"):
+        if p.as_posix().endswith(".SEN3"):
+            satfolders.append(p)
 
     for sat_image in satfolders:
 
@@ -120,6 +119,7 @@ def main(sat_fold, coords_file, out_fold, inbands, slstr_res, sat_platform):
             alb_df["hour"] = int(sat_date.hour)
             alb_df["minute"] = int(sat_date.minute)
             alb_df["second"] = int(sat_date.second)
+            alb_df["dayofyear"] = int(sat_date.timetuple().tm_yday)
 
             # Append platform ID as numeric value (A=0, B=1)
             if sat_image_platform == 'A':
@@ -161,7 +161,7 @@ def main(sat_fold, coords_file, out_fold, inbands, slstr_res, sat_platform):
 
     # Set column order for sorted files
     dt_columns = ["year", "month", "day", "hour", "minute", "second", 
-                  "platform"]
+                  "dayofyear", "platform"]
 
     # Open temp files
     for location in coords:
