@@ -2,22 +2,24 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 
 
-Current S3Snow processor version: 2.1
+Current S3Snow processor version: 2.3
 
-The repository contains 2 tools:
+The repository contains 3 tools:
 
 - *s3_extract_snow_products*: the script is designed to extract the outputs from the S3 OLCI SNOW processor based on a list of Sentinel-3 (Hereafter “S3”) OLCI imagery, for a named list of user-defined lat/lon coordinates.
 - *s3_band_extract*: the script allows to extract values from S3 bands (OLCI or SLSTR) from a list of S3 images for a named list of user-defined lat/lon coordinates.
+- *list_sat_bands*: returns a list of all available bands from an S3 OLCI or SLSTR scene.
 
 The work requires **SNAP 7** and the following experimental SNAP plugins:
 
- - s3tbx-snow-2.0.10-SNAPSHOT
+ - s3tbx-snow-2.3-SNAPSHOT
  - s3tbx-olci-o2corr-0.81-SNAPSHOT
- - s3tbx-idepix-olci-s3snow-0.81-SNAPSHOT
-
+ - s3tbx-idepix-olci-s3snow-0.82-SNAPSHOT
+ - snap-slope-0.92-SNAPSHOT (if the S3 SNOW DEM products are to extracted)
+ 
 Code developed within the **Sentinel-3 for Science, Land Study 1: Snow**   project led by Jason Box. More information at [snow.geus.dk](http://snow.geus.dk/).
 
-Development and testing: Maxim Lamare and Jason Box.
+Development and testing: Maxim Lamare, Jason Box, and Jonas Kvist Andersen.
 
 
 
@@ -30,7 +32,7 @@ Development and testing: Maxim Lamare and Jason Box.
 
 <a name="intro"></a>
 # Introduction
-The s3_extract_snow_products script, developed by the [S34Sci Land Study 1: Snow](http://snow.geus.dk/), extracts the outputs of the S3Snow algorithm results for a list of S3A OLCI L1C scenes for a user-supplied list of latitude and longitude coordinates.
+The s3_extract_snow_products script, developed by the [S34Sci Land Study 1: Snow](http://snow.geus.dk/), extracts the outputs of the S3Snow algorithm results for a list of S3 OLCI L1C scenes for a user-supplied list of latitude and longitude coordinates.
 
 <a name="setup"></a>
 # Requirements and setup
@@ -49,10 +51,9 @@ _Setup steps:_
 2. The current version of the script was designed to work with Python 3.4 or 3.5.
 3. Install SNAP 7 and the S3Snow plugins (listed below). The S34Sci Snow [SUM](https://s3tbx-snow.readthedocs.io/en/latest/) describes the plugins.
 4. Install or verify that JDK is installed on your system and JDK_HOME path is set.
-5. Install Maven. Mac users can use [HomeBrew](https://docs.brew.sh/Installation) or similar.
-6. Create a Conda environment (see steps below) and  configure snappy to work with the environment's Python interpreter (the hardest part). The instructions are found [here](https://senbox.atlassian.net/wiki/spaces/SNAP/pages/50855941/Configure+Python+to+use+the+SNAP-Python+snappy+interface).
+5. Create a Conda environment (see steps below) and  configure snappy to work with the environment's Python interpreter (the hardest part). The instructions are found [here](https://senbox.atlassian.net/wiki/spaces/SNAP/pages/50855941/Configure+Python+to+use+the+SNAP-Python+snappy+interface).
 
-For MacOS users @mankoff created an installation guide (similar on Linux systems):
+For MacOS users @mankoff created an installation guide (essentially the same for Linux or Windows systems):
 
     # create conda environement
     conda create -n SNAP python=3.4
@@ -91,7 +92,7 @@ Run  `python s3_extract_snow_products.py -h` for help.
 
 The scripts needs the following obligatory inputs:
 
- - ***-i, --input***: the path to the folder containing unzipped S3 OLCI L1C granules (scenes). Each unzipped folder (.SEN3) contains the NetCDF data files (.nc) and an XML file (.xml).
+ - ***-i, --input***: the path to the folder containing unzipped S3 OLCI L1C granules (scenes). Each unzipped folder (.SEN3) contains the NetCDF data files (.nc) and an XML file (.xml). The script will also access S3 scenes that are located in sub-directories in the input path.
  - ***-c, --coords***: the path to a file containing the coordinates of the pixels values to extract from the S3 images. The file should be in a .csv format with each row containing: *Name, lat, lon*, with the latitude and longitude in degrees (EPSG:4326). I.E; Inukjuak, 58.4550, -78.1037
  - **-o, --output:** the path to the output folder, where a .csv file for each site will be created, containing the output values from the S3Snow processor. A list of the S3 scenes for which the algorithm failed is created in a separate file. See note below.
 
@@ -107,6 +108,8 @@ The following optional inputs can be specified:
 
  - **-r, --recovery:** run the algorithm in recovery mode. If the processing stopped in the middle of a run for some reason, the output temporary files are not sorted. The recovery mode will attempt to convert the temporary files to final files, therefore reducing the number of images to re-process the next time. A manual selection of the unprocessed scenes in the input folder will be necessary to run only the unprocessed scenes after recovery mode (don't forget to save the recovery mode output files elsewhere or they will be overwritten). In recovery mode, the **elevation** flag has to be set to the value of the failed run otherwise the code will crash. Activate recovery mode by setting the flag to `"yes", "true", "t", "y", or "1"`. To run in normal mode: `"no", "false", "f", "n", or "0"`. By default, the option is turned off.
 
+- **-f, --platform** specify the Sentinel-3 platform (i.e. Sentinel-3A, -3B, or both) to include data from. Options are 'A', 'B', or 'AB' (for both platforms).
+
 **Example run:**
 
     python s3_extract_snow_products.py -i "/path/to/folder/containing/S3/folders"\
@@ -116,6 +119,8 @@ The following optional inputs can be specified:
 The output csv file contains:
 
 - Year, Month, Day, Hour, Minute, Second of acquisition
+- Day of year of acquisition
+- Satellite platform ID (S3A = 0, S3B = 0)
 - Grain Diameter (mm), SSA (m<sup>2</sup>.kg<sup>-1</sup>)
 - NDSI, NDBI
 - Cloud flag (cloud = 1, no cloud = 0)
@@ -139,6 +144,7 @@ The scripts needs the following obligatory inputs:
 The following optional inputs can be specified:
 
 - ***-r, --res***: specifies the reader to be used to open SLSTR images. By default the 500m resolution reader is specified, but the 1km reader can be set using this flag. The flag values can either be `"500"` or `"1000"`. For specific applications only.
+- **-p, --platform** specify the Sentinel-3 platform (i.e. Sentinel-3A, -3B, or both) to include data from. Options are 'A', 'B', or 'AB' (for both platforms).
 
 **Example run:**
 
@@ -148,5 +154,28 @@ The following optional inputs can be specified:
 **Outputs:**
 The output csv file contains:
 
-- Year, Month, Day, Hour, Minute, Second of acquisition.
-- The values for all the bands specified as inputs.
+- Year, Month, Day, Hour, Minute, Second of acquisition
+- Day of year of acquisition
+- Satellite platform ID (S3A = 0, S3B = 1)
+- The values for all the bands specified as inputs
+
+## list_sat_bands.py
+
+Run `python list_sat_bands.py -h` for help.
+
+The script takes only two inputs:
+
+- ***-i, --insat***: the path to a single S3 OLCI or SLSTR scene, i.e. a .SEN3 folder containing NetCDF data files (.nc) and an XML file (.xml).
+- ***-f, --file***: path to the output text file to which the list of bands will be written.
+
+**Example run:**
+
+    python list_sat_bands.py -i "/path/to/folder/containing/S3/scene"\
+    -f "/path/to/output/textfile.txt"
+
+**Outputs:**
+The output text file contains:
+
+- The OLCI/SLSTR band names
+- The OLCI/SLSTR TiePointGrid names
+- The OLCI/SLSTR mask names
